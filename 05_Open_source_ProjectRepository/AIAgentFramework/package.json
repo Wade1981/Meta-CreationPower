@@ -1,0 +1,38 @@
+{
+  "name": "ai-agent-framework",
+  "version": "1.0.0",
+  "description": "A framework for building AI agents with integrated RPA capabilities",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "lint": "echo \"No linting configured\" && exit 0",
+    "typecheck": "echo \"No type checking configured\" && exit 0"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "framework",
+    "rpa",
+    "automation",
+    "blockchain",
+    "machine-learning",
+    "deep-learning"
+  ],
+  "author": "技匠之锤科技有限公司",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ai-agent-framework.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/ai-agent-framework/issues"
+  },
+  "homepage": "https://github.com/yourusername/ai-agent-framework#readme",
+  "engines": {
+    "node": ">=12.0.0"
+  }
+}
