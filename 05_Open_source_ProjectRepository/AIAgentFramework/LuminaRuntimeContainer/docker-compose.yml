@@ -1,0 +1,103 @@
+# Lumina Runtime Container (LRC) - Docker Compose配置
+
+version: '3.8'
+
+services:
+  # 主容器服务
+  lumina-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lumina-runtime-container:latest
+    container_name: lumina-runtime
+    ports:
+      - "8080:8080"  # API服务端口
+      - "9090:9090"  # 监控服务端口
+      - "2222:22"    # SSH端口
+    environment:
+      - LRC_LANG=python
+      - LRC_MEMORY_LIMIT=4096
+      - LRC_CPU_LIMIT=2
+      - LRC_GPU_ENABLED=false
+      - LRC_LOG_LEVEL=info
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./examples:/app/examples
+      - ./scripts:/app/scripts
+    networks:
+      - lumina-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 监控服务
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - lumina-network
+    restart: unless-stopped
+    depends_on:
+      - lumina-runtime
+
+  # 日志服务
+  fluentd:
+    image: fluent/fluentd:latest
+    container_name: fluentd
+    ports:
+      - "24224:24224"
+    volumes:
+      - ./config/fluentd.conf:/fluentd/etc/fluentd.conf
+      - ./logs:/app/logs
+    networks:
+      - lumina-network
+    restart: unless-stopped
+    depends_on:
+      - lumina-runtime
+
+  # 存储服务
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - lumina-network
+    restart: unless-stopped
+
+  # 缓存服务
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - lumina-network
+    restart: unless-stopped
+
+# 网络配置
+networks:
+  lumina-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# 卷配置
+volumes:
+  prometheus-data:
+  mongodb-data:
+  redis-data:

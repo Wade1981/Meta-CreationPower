@@ -1,0 +1,21 @@
+{
+    "RUNTIME_START_TIME":  "2026-02-11T18:26:45.0788968+08:00",
+    "CONTAINERS":  [
+                       {
+                           "Status":  "created",
+                           "Created":  "2026-02-11T18:15:27.0523012+08:00",
+                           "Name":  "test-container",
+                           "ID":  "elr-1234567890",
+                           "Image":  "ubuntu:latest"
+                       },
+                       {
+                           "Image":  "python:3.9",
+                           "ID":  "elr-0987654321",
+                           "Started":  "2026-02-11T18:15:27.0533095+08:00",
+                           "Created":  "2026-02-11T18:15:27.0533095+08:00",
+                           "Name":  "python-app",
+                           "Status":  "running"
+                       }
+                   ],
+    "RUNTIME_STARTED":  true
+}
