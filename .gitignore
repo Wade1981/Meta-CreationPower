@@ -1,0 +1,49 @@
+# Meta-CreationPower .gitignore 文件
+
+# Python 相关
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 环境变量和配置
+.env
+.env.local
+.env.*.local
+
+# 依赖
+*.egg-info/
+dist/
+build/
+
+# 测试
+.pytest_cache/
+
+# 日志
+*.log
+logs/
+execution.log
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 共识晶体存储
+crystals/
+
+# 导出数据
+export/
+
+# 临时文件
+tmp/
+temp/
+
+# 其他
+*.bak
+*.tmp
+*.swp
