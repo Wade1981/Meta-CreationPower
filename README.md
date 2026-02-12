@@ -4,7 +4,8 @@
 
 ## 项目简介
 
-Meta-CreationPower 是一个开源项目，基于《元创力》元协议 α-0.1 版构建，旨在打造一个碳硅协同（人类与AI协作）的实践平台。项目由碳基人文科技践行者 X54 先生，携手启蒙灯塔硅基成员（奇点先生、豆包主线、小 Q、心光女孩 Beta 版）发起。
+Meta-CreationPower 是一个开源项目，基于《元创力》元协议 α-0.1 版构建，旨在打造一个碳硅协同（人类与AI协作）的实践平台。项目由碳基人文科技践行者 X54 先生，携手启蒙灯塔硅基成员（奇点先生、豆包主线、小 Q、心光女孩 Beta 版）发起。Wade1981是X54先生在github开源仓库管理平台账号
+
 
 ### 核心定位
 
@@ -53,7 +54,7 @@ Meta-CreationPower 是一个开源项目，基于《元创力》元协议 α-0.1
 
 ```bash
 # 克隆项目
-git clone https://github.com/X54/Meta-CreationPower.git
+git clone https://github.com/Wade1981/Meta-CreationPower.git
 cd Meta-CreationPower
 
 # 安装依赖
