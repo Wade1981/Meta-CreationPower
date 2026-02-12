@@ -1,0 +1,44 @@
+# Lumina Runtime Container - Prometheus配置
+
+global:
+  scrape_interval: 15s  # 抓取间隔
+  evaluation_interval: 15s  # 评估间隔
+
+# 告警配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# 规则配置
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# 抓取配置
+scrape_configs:
+  # 监控Prometheus自身
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 监控Lumina Runtime Container
+  - job_name: 'lumina-runtime'
+    static_configs:
+      - targets: ['lumina-runtime:9090']
+
+  # 监控Docker容器
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['lumina-runtime:8080']
+
+  # 监控MongoDB
+  - job_name: 'mongodb'
+    static_configs:
+      - targets: ['mongodb:27017']
+
+  # 监控Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
