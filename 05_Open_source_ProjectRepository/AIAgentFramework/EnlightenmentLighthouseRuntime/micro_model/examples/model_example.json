@@ -1,0 +1,10 @@
+{
+  "id": "gpt2",
+  "type": "text-generation",
+  "name": "GPT-2",
+  "version": "1.0",
+  "path": "./model/models/gpt2",
+  "download_url": "https://huggingface.co/gpt2/resolve/main/pytorch_model.bin",
+  "created_at": "2026-02-18T12:00:00Z",
+  "updated_at": "2026-02-18T12:00:00Z"
+}

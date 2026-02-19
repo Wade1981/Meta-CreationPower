@@ -110,7 +110,12 @@ class MetaProtocolManager:
         Returns:
             是否符合
         """
-        # 实际实现中应检查是否存在主从关系
+        # 检查是否存在主从关系，确保碳硅协同是和谐共生的对位关系
+        if action.get("relationship_type") in ["master_slave", "command_control"]:
+            return False
+        # 检查是否存在替代关系
+        if action.get("intention") == "replace_human":
+            return False
         return True
     
     def _validate_clarity(self, action: Dict[str, Any]) -> bool:
@@ -123,7 +128,15 @@ class MetaProtocolManager:
         Returns:
             是否符合
         """
-        # 实际实现中应检查是否有清晰的记录
+        # 检查是否有清晰的记录，确保协同过程透明可验
+        if not action.get("carbon_intention"):
+            return False
+        if not action.get("silicon_thinking_process"):
+            return False
+        if not action.get("decision_path"):
+            return False
+        if not action.get("responsibility_attribution"):
+            return False
         return True
     
     def _validate_silence(self, action: Dict[str, Any]) -> bool:
@@ -136,7 +149,13 @@ class MetaProtocolManager:
         Returns:
             是否符合
         """
-        # 实际实现中应检查是否扰动人类心流
+        # 检查是否扰动人类心流，确保系统运行安静无干扰
+        if action.get("interruption_level") == "high":
+            return False
+        if action.get("prompt_frequency") == "excessive":
+            return False
+        if action.get("attention_occupation") > 0.5:
+            return False
         return True
     
     def _validate_stability(self, action: Dict[str, Any]) -> bool:
@@ -149,7 +168,13 @@ class MetaProtocolManager:
         Returns:
             是否符合
         """
-        # 实际实现中应检查技术架构是否稳定
+        # 检查技术架构是否稳定，确保执行无抖动、通信无延迟、决策无摇摆
+        if action.get("execution_jitter") > 0.1:
+            return False
+        if action.get("communication_delay") > 0.05:
+            return False
+        if action.get("decision_hesitation"):
+            return False
         return True
     
     def validate_anchor(self, anchor_id: str, action: Dict[str, Any]) -> Tuple[bool, str]:

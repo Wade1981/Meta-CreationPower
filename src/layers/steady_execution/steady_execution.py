@@ -66,7 +66,7 @@ class SteadyExecutor:
             if self.current_concurrent_tasks < self.max_concurrent_tasks and not self.task_queue.empty():
                 task = self.task_queue.get()
                 self._execute_task(task)
-            time.sleep(0.01)  # 10ms 检查一次，确保响应速度
+            time.sleep(0.005)  # 5ms 检查一次，确保响应速度，符合"静"原则的无抖动执行
     
     def _execute_task(self, task: Task):
         """

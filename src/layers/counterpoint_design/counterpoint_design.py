@@ -167,6 +167,7 @@ class CounterpointDesigner:
         
         # 实际实现中应根据步骤类型执行相应的操作
         # 这里仅返回模拟结果
+        import time
         return {
             "success": True,
             "step": step,
@@ -174,7 +175,7 @@ class CounterpointDesigner:
             "inputs": inputs,
             "outputs": {
                 "message": f"执行步骤 {step_index + 1}: {step['action']}",
-                "timestamp": ""
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
             }
         }
     

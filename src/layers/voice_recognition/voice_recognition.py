@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 import json
 import uuid
+import time
 
 
 @dataclass
@@ -46,6 +47,9 @@ class CollaborativeSonicMap:
         Returns:
             注册的声部对象
         """
+        if voice_type not in ['carbon', 'silicon']:
+            raise ValueError("声部类型必须是 'carbon' 或 'silicon'")
+        
         voice_id = str(uuid.uuid4())
         voice = Voice(
             voice_id=voice_id,
@@ -54,8 +58,8 @@ class CollaborativeSonicMap:
             capability_vector=capability_vector,
             intention_vector=intention_vector,
             description=description,
-            created_at="",  # 实际实现中应使用时间戳
-            last_active=""
+            created_at=time.strftime("%Y-%m-%d %H:%M:%S"),
+            last_active=time.strftime("%Y-%m-%d %H:%M:%S")
         )
         
         self.voices[voice_id] = voice
@@ -98,7 +102,7 @@ class CollaborativeSonicMap:
             voice_id: 声部ID
         """
         if voice_id in self.voices:
-            self.voices[voice_id].last_active = ""  # 实际实现中应使用时间戳
+            self.voices[voice_id].last_active = time.strftime("%Y-%m-%d %H:%M:%S")
     
     def remove_voice(self, voice_id: str):
         """
