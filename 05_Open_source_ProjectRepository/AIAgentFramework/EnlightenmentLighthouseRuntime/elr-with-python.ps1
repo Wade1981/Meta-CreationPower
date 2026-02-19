@@ -540,7 +540,7 @@ function Exec-Container {
     $containerID = ""
     $command = ""
 
-    for ($i = 2; $i -lt $args.Length; $i++) {
+    for ($i = 1; $i -lt $args.Length; $i++) {
         if ($args[$i] -eq "--id" -and $i + 1 -lt $args.Length) {
             $containerID = $args[$i + 1]
             $i++
@@ -690,12 +690,10 @@ function Download-PortablePython {
         # 创建临时目录
         New-Item -ItemType Directory -Path $PYTHON_DIR -Force | Out-Null
         
-        # 下载Python便携式版本
-        Invoke-WebRequest -Uri $PYTHON_PORTABLE_URL -OutFile $PYTHON_PORTABLE_ZIP -ErrorAction Stop
+        # 下载Python便携式版�?        Invoke-WebRequest -Uri $PYTHON_PORTABLE_URL -OutFile $PYTHON_PORTABLE_ZIP -ErrorAction Stop
         Write-Host "Download completed: $PYTHON_PORTABLE_ZIP"
         
-        # 解压缩
-        Write-Host "Extracting portable Python..."
+        # 解压�?        Write-Host "Extracting portable Python..."
         Expand-Archive -Path $PYTHON_PORTABLE_ZIP -DestinationPath $PYTHON_DIR -Force -ErrorAction Stop
         Write-Host "Extraction completed"
         
@@ -763,8 +761,8 @@ function Run-Python {
 
     # 尝试使用系统Python，如果没有则下载便携式Python
     $pythonPath = Get-Command python -ErrorAction SilentlyContinue
-    if ($null -eq $pythonPath) {
-        Write-Host "System Python not found, using portable Python..."
+    if ($null -eq $pythonPath -or $pythonPath.Source -like "*Microsoft\WindowsApps\python.exe") {
+        Write-Host "System Python not found or is a placeholder, using portable Python..."
         if (-not (Download-PortablePython)) {
             Write-Host "Error: Failed to prepare portable Python"
             return
@@ -859,30 +857,25 @@ nsmap = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
 def extract_text_from_docx(docx_path):
     """
-    从docx文件中提取文本内容
-    """
+    从docx文件中提取文本内�?    """
     text = []
     
     try:
-        # 打开docx文件（本质是zip文件）
-        with ZipFile(docx_path, 'r') as zf:
+        # 打开docx文件（本质是zip文件�?        with ZipFile(docx_path, 'r') as zf:
             # 读取document.xml文件
             with zf.open('word/document.xml') as f:
                 tree = ET.parse(f)
                 root = tree.getroot()
                 
-                # 遍历所有段落
-                for para in root.findall('.//w:p', namespaces=nsmap):
+                # 遍历所有段�?                for para in root.findall('.//w:p', namespaces=nsmap):
                     para_text = []
                     
-                    # 遍历段落中的所有文本运行
-                    for run in para.findall('.//w:r', namespaces=nsmap):
+                    # 遍历段落中的所有文本运�?                    for run in para.findall('.//w:r', namespaces=nsmap):
                         for text_elem in run.findall('.//w:t', namespaces=nsmap):
                             if text_elem.text:
                                 para_text.append(text_elem.text)
                     
-                    # 检查段落样式
-                    style_name = ""
+                    # 检查段落样�?                    style_name = ""
                     pPr = para.find('.//w:pPr', namespaces=nsmap)
                     if pPr:
                         pStyle = pPr.find('.//w:pStyle', namespaces=nsmap)

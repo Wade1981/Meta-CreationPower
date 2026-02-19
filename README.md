@@ -191,6 +191,7 @@ Meta-CreationPower/
 
 - **[AIAgentFramework](05_Open_source_ProjectRepository/AIAgentFramework/)** - AI Agent框架
   - [EnlightenmentLighthouseRuntime](05_Open_source_ProjectRepository/AIAgentFramework/EnlightenmentLighthouseRuntime/) - 启蒙灯塔运行时
+    - [Micro Model Sandbox](05_Open_source_ProjectRepository/AIAgentFramework/EnlightenmentLighthouseRuntime/micro_model/) - 微模型运行沙箱，支持在容器中独立运行各种微模型
   - [LuminaRuntimeContainer](05_Open_source_ProjectRepository/AIAgentFramework/LuminaRuntimeContainer/) - Lumina运行时容器
 
 - **[SiliconPartnerAlgorithmLab](05_Open_source_ProjectRepository/SiliconPartnerAlgorithmLab/)** - 硅基伙伴算法实验室

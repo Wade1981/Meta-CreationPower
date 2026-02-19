@@ -47,3 +47,6 @@ temp/
 *.bak
 *.tmp
 *.swp
+
+# 私有项目库
+06_EnterprisePrivateProjects/
