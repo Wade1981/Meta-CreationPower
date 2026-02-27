@@ -1,0 +1,118 @@
+/* 全局样式 */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* 页面导航样式 */
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+/* 卡片样式 */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 图表容器样式 */
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+    margin-top: 20px;
+}
+
+/* 模块状态样式 */
+.module-status {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.module-status.active {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.module-status.inactive {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .row {
+        flex-direction: column;
+    }
+    
+    .col-md-3 {
+        margin-bottom: 15px;
+    }
+    
+    .chart-container {
+        height: 300px;
+    }
+}
+
+/* 按钮样式 */
+.btn {
+    border-radius: 4px;
+}
+
+/* 表格样式 */
+.table {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 表单样式 */
+.form-control {
+    border-radius: 4px;
+}
+
+/* 模态框样式 */
+.modal-content {
+    border-radius: 8px;
+}
+
+/* 导航链接样式 */
+.nav-link {
+    border-radius: 4px;
+}
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-link.active {
+    background-color: rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+}
+
+/* 加载动画 */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 提示消息样式 */
+.alert {
+    margin-top: 10px;
+    border-radius: 4px;
+}
