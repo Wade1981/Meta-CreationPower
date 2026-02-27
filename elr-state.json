@@ -23,6 +23,14 @@
                            "Created":  "2026-02-17T23:49:02.7030141+08:00",
                            "Name":  "container-234902",
                            "Status":  "running"
+                       },
+                       {
+                           "Image":  "symmetric-finance-system:1.0.0",
+                           "ID":  "elr-153640613",
+                           "Started":  "2026-02-27T15:36:40.6169666+08:00",
+                           "Created":  "2026-02-27T15:36:40.6143908+08:00",
+                           "Name":  "container-153640",
+                           "Status":  "running"
                        }
                    ],
     "RUNTIME_STARTED":  true

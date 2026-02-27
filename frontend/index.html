@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字资产工厂引擎 - 前端界面</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#">数字资产工厂引擎</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#dashboard">仪表盘</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#assets">资产管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#system">系统状态</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#workflow">工作流管理</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="elrDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            ELR 管理
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="elrDropdown">
+                            <li><a class="dropdown-item" href="#elr-models">模型管理</a></li>
+                            <li><a class="dropdown-item" href="#elr-containers">容器管理</a></li>
+                            <li><a class="dropdown-item" href="#elr-sandbox">沙箱管理</a></li>
+                            <li><a class="dropdown-item" href="#elr-monitor">监控</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container mt-4">
+            <div id="content">
+                <!-- 仪表盘页面 -->
+                <div id="dashboard" class="page active">
+                    <h1 class="mb-4">系统仪表盘</h1>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">总资产数</h5>
+                                    <p class="card-text" id="total-assets">0</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">活跃进程</h5>
+                                    <p class="card-text" id="active-processes">0</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">总交易数</h5>
+                                    <p class="card-text" id="total-transactions">0</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">系统状态</h5>
+                                    <p class="card-text" id="system-health">健康</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <h2>资产分布</h2>
+                        <div class="chart-container">
+                            <canvas id="asset-distribution-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 资产管理页面 -->
+                <div id="assets" class="page">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>资产管理</h1>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createAssetModal">
+                            创建资产
+                        </button>
+                    </div>
+                    
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" placeholder="搜索资产..." id="asset-search">
+                        <button class="btn btn-outline-secondary" type="button" id="search-btn">搜索</button>
+                    </div>
+
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>资产ID</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="asset-table-body">
+                            <!-- 资产列表将通过JavaScript动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 系统状态页面 -->
+                <div id="system" class="page">
+                    <h1 class="mb-4">系统状态</h1>
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">模块状态</h5>
+                            <div class="row" id="module-statuses">
+                                <!-- 模块状态将通过JavaScript动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <div class="card-body">
+                            <h5 class="card-title">容器状态</h5>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>容器ID</th>
+                                        <th>状态</th>
+                                        <th>资产ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="container-table-body">
+                                    <!-- 容器列表将通过JavaScript动态生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 工作流页面 -->
+                <div id="workflow" class="page">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h1>工作流管理</h1>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createWorkflowModal">
+                            执行工作流
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title">工作流执行历史</h5>
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>执行ID</th>
+                                        <th>工作流ID</th>
+                                        <th>状态</th>
+                                        <th>开始时间</th>
+                                        <th>完成时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="workflow-table-body">
+                                    <!-- 工作流历史将通过JavaScript动态生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建资产模态框 -->
+    <div class="modal fade" id="createAssetModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">创建资产</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-asset-form">
+                        <div class="mb-3">
+                            <label class="form-label">资产类型</label>
+                            <input type="text" class="form-control" id="asset-type" value="general">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">资产内容</label>
+                            <textarea class="form-control" id="asset-content" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">数据类型</label>
+                            <input type="text" class="form-control" id="data-type" value="text">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">结构类型</label>
+                            <input type="text" class="form-control" id="structure-type" value="unstructured">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="submit-asset">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 执行工作流模态框 -->
+    <div class="modal fade" id="createWorkflowModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">执行工作流</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-workflow-form">
+                        <div class="mb-3">
+                            <label class="form-label">工作流ID</label>
+                            <input type="text" class="form-control" id="workflow-id" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">工作流数据</label>
+                            <textarea class="form-control" id="workflow-data" rows="3" placeholder='{"param1": "value1", "param2": "value2"}'></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="submit-workflow">执行</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+    
+    <!-- ELR 模型管理页面 -->
+    <div id="elr-models" class="page">
+        <div class="container mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>ELR 模型管理</h1>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#downloadModelModal">
+                    下载模型
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>模型ID</th>
+                                <th>模型类型</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="elr-models-table-body">
+                            <tr>
+                                <td colspan="5" class="text-center">点击上方按钮下载模型</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ELR 容器管理页面 -->
+    <div id="elr-containers" class="page">
+        <div class="container mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>ELR 容器管理</h1>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContainerModal">
+                    创建容器
+                </button>
+            </div>
+            <div class="card">
+                <div class="card-body">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>容器名称</th>
+                                <th>状态</th>
+                                <th>模型ID</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="elr-containers-table-body">
+                            <tr>
+                                <td colspan="4" class="text-center">点击上方按钮创建容器</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ELR 沙箱管理页面 -->
+    <div id="elr-sandbox" class="page">
+        <div class="container mt-4">
+            <h1>ELR 沙箱管理</h1>
+            <div class="card mt-4">
+                <div class="card-body">
+                    <form id="sandbox-form">
+                        <div class="mb-3">
+                            <label for="sandbox-container" class="form-label">容器名称</label>
+                            <input type="text" class="form-control" id="sandbox-container" placeholder="输入容器名称">
+                        </div>
+                        <div class="mb-3">
+                            <label for="sandbox-command" class="form-label">命令</label>
+                            <input type="text" class="form-control" id="sandbox-command" placeholder="输入命令，如 ls -la">
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="executeSandboxCommand()">执行命令</button>
+                    </form>
+                    <div class="mt-4">
+                        <label for="sandbox-output" class="form-label">输出</label>
+                        <textarea class="form-control" id="sandbox-output" rows="10" readonly></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ELR 监控页面 -->
+    <div id="elr-monitor" class="page">
+        <div class="container mt-4">
+            <h1>ELR 监控</h1>
+            <div class="card mt-4">
+                <div class="card-body" id="elr-monitor-content">
+                    <div class="text-center">点击刷新按钮加载监控数据</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 下载模型模态框 -->
+    <div class="modal fade" id="downloadModelModal" tabindex="-1" aria-labelledby="downloadModelModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="downloadModelModalLabel">下载模型</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="download-model-form">
+                        <div class="mb-3">
+                            <label for="model-id" class="form-label">模型ID</label>
+                            <input type="text" class="form-control" id="model-id" placeholder="输入模型ID">
+                        </div>
+                        <div class="mb-3">
+                            <label for="model-type" class="form-label">模型类型</label>
+                            <input type="text" class="form-control" id="model-type" placeholder="输入模型类型">
+                        </div>
+                        <div class="mb-3">
+                            <label for="model-url" class="form-label">下载URL</label>
+                            <input type="text" class="form-control" id="model-url" placeholder="输入模型下载URL">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" onclick="downloadElrModel()">下载</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 创建容器模态框 -->
+    <div class="modal fade" id="createContainerModal" tabindex="-1" aria-labelledby="createContainerModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createContainerModalLabel">创建容器</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-container-form">
+                        <div class="mb-3">
+                            <label for="container-name" class="form-label">容器名称</label>
+                            <input type="text" class="form-control" id="container-name" placeholder="输入容器名称">
+                        </div>
+                        <div class="mb-3">
+                            <label for="container-model" class="form-label">模型ID</label>
+                            <input type="text" class="form-control" id="container-model" placeholder="输入模型ID">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" onclick="createElrContainer()">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
