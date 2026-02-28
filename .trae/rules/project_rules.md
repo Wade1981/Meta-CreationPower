@@ -75,6 +75,10 @@ Meta-CreationPower 是启蒙灯塔起源团队开发的碳硅协同框架，基�
 - **档案流程**：创建、审核、归档的完整流程，确保档案的完整性和一致性
 - **存储结构**：按项目代码和档案类型划分的存储结构，确保档案的有序管理
 - **访问权限**：根据团队成员角色设置合适的档案访问权限
+- **文档存放规则**：
+  - **项目相关文档**：与Meta-CreationPower具体项目有关的md文件存放到对应项目的docs文件夹下
+  - **非项目相关文档**：其他非项目相关md文件存放到 `E:\X54\github\Meta-CreationPower\06_EnterprisePrivateProjects\EnlightenmentLighthouseOriginTeam\EL-CSCC Archive\ELD-ARC`
+  - **项目相关文档要求**：必须是代码织梦者在写代码、算法创造、开发调试成功后生成的md文档
 
 ### 思维链与记忆链规则
 - **思维链结构**：包含思维锚点、逻辑推理、假设验证、结论输出的完整结构
