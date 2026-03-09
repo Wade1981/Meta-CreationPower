@@ -18,14 +18,15 @@ type ModelManager struct {
 
 // Model 模型信息
 type Model struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Name        string    `json:"name"`
-	Version     string    `json:"version"`
-	Path        string    `json:"path"`
-	DownloadURL string    `json:"download_url"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	Name        string          `json:"name"`
+	Version     string          `json:"version"`
+	Path        string          `json:"path"`
+	DownloadURL string          `json:"download_url"`
+	Properties  *ModelProperties `json:"properties,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // NewModelManager 创建模型管理器
@@ -49,16 +50,40 @@ func (m *ModelManager) GetModel(modelID string) (*Model, error) {
 		return nil, fmt.Errorf("model %s not found", modelID)
 	}
 
-	// 这里可以从模型目录中的元数据文件读取模型信息
-	// 暂时返回一个简单的模型信息
+	// 加载模型属性
+	properties, err := LoadModelProperties(modelPath)
+	if err != nil {
+		fmt.Printf("Warning: Failed to load model properties: %v\n", err)
+		// 继续执行，使用默认值
+	}
+
+	// 从模型属性中获取信息，或使用默认值
+	modelType := "unknown"
+	modelName := modelID
+	modelVersion := "1.0.0"
+
+	if properties != nil {
+		if properties.Type != "" {
+			modelType = properties.Type
+		}
+		if properties.ModelName != "" {
+			modelName = properties.ModelName
+		}
+		if properties.Version != "" {
+			modelVersion = properties.Version
+		}
+	}
+
+	// 返回模型信息
 	return &Model{
-		ID:        modelID,
-		Type:      "unknown",
-		Name:      modelID,
-		Version:   "1.0.0",
-		Path:      modelPath,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:          modelID,
+		Type:        modelType,
+		Name:        modelName,
+		Version:     modelVersion,
+		Path:        modelPath,
+		Properties:  properties,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}, nil
 }
 
@@ -146,4 +171,23 @@ func (m *ModelManager) Exists(modelID string) bool {
 	modelPath := filepath.Join(m.config.ModelDir, modelID)
 	_, err := os.Stat(modelPath)
 	return !os.IsNotExist(err)
+}
+
+// GetModelAdapter 获取模型适配器
+func (m *ModelManager) GetModelAdapter(modelID string) (*ModelAdapter, error) {
+	// 获取模型信息
+	model, err := m.GetModel(modelID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查模型属性是否存在
+	if model.Properties == nil {
+		return nil, fmt.Errorf("model properties not found for model %s", modelID)
+	}
+
+	// 创建模型适配器
+	adapter := NewModelAdapter(model.Properties)
+
+	return adapter, nil
 }
