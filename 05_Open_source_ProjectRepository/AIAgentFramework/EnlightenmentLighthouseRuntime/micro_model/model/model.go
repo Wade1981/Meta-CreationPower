@@ -2,12 +2,9 @@ package model
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
-
 	"micro-model/config"
 )
 
