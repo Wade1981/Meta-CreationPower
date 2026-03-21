@@ -1,0 +1,31 @@
+{
+  "model_name": "EL-CSCC Archive",
+  "version": "1.1",
+  "description": "数字档案管理模型，支持添加、查询、更新、删除档案",
+  "type": "archive",
+  "dependencies": {
+    "python": "3.8+",
+    "pip": [],
+    "system": []
+  },
+  "resources": {
+    "cpu": {
+      "min_cores": 1,
+      "recommended_cores": 2
+    },
+    "memory": {
+      "min_ram": "512MB",
+      "recommended_ram": "1GB"
+    },
+    "gpu": {
+      "required": false,
+      "min_memory": "0",
+      "recommended_memory": "0",
+      "cuda_version": ""
+    }
+  },
+  "environment_variables": {},
+  "entry_points": {
+    "predict": "el_cscc_archive_model.py"
+  }
+}

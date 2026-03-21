@@ -74,7 +74,7 @@ func (c *Container) Start() error {
 		c.Status = ContainerStatusError
 		c.Error = fmt.Sprintf("failed to save container config: %v", err)
 		c.saveConfig()
-		return c.Error
+		return fmt.Errorf(c.Error)
 	}
 
 	fmt.Printf("Starting container: %s (%s)\n", c.ID, c.Name)
@@ -106,7 +106,7 @@ func (c *Container) Stop() error {
 		c.Status = ContainerStatusError
 		c.Error = fmt.Sprintf("failed to save container config: %v", err)
 		c.saveConfig()
-		return c.Error
+		return fmt.Errorf(c.Error)
 	}
 
 	fmt.Printf("Stopping container: %s (%s)\n", c.ID, c.Name)
@@ -132,7 +132,7 @@ func (c *Container) Pause() error {
 		c.Status = ContainerStatusError
 		c.Error = fmt.Sprintf("failed to save container config: %v", err)
 		c.saveConfig()
-		return c.Error
+		return fmt.Errorf(c.Error)
 	}
 
 	fmt.Printf("Paused container: %s (%s)\n", c.ID, c.Name)
@@ -157,7 +157,7 @@ func (c *Container) Unpause() error {
 		c.Status = ContainerStatusError
 		c.Error = fmt.Sprintf("failed to save container config: %v", err)
 		c.saveConfig()
-		return c.Error
+		return fmt.Errorf(c.Error)
 	}
 
 	fmt.Printf("Unpaused container: %s (%s)\n", c.ID, c.Name)

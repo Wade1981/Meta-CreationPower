@@ -1,0 +1,28 @@
+# 服务器配置
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+# 容器配置
+container:
+  base_image: "python:3.8-slim"
+  network_mode: "bridge"
+  memory_limit: "1G"
+  cpu_limit: 1
+
+# 模型配置
+model:
+  model_dir: "./model/models"
+  default_model: "gpt2"
+  download_timeout: 300
+
+# 沙箱配置
+sandbox:
+  enabled: true
+  isolation_level: "container"
+
+# 监控配置
+monitoring:
+  enabled: true
+  interval: 5
+  prometheus_port: 9090

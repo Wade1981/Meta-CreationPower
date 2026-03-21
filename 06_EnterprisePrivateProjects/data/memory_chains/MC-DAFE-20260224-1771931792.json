@@ -1,0 +1,16 @@
+{
+  "chain_id": "MC-DAFE-20260224-1771931792",
+  "project_id": "DAFE",
+  "title": "数字资产工厂引擎记忆链",
+  "description": "数字资产工厂引擎项目的开发记忆链",
+  "creation_time": 1771931792.9669988,
+  "last_update": 1771931792.968939,
+  "links": [],
+  "thought_links": [
+    {
+      "thought_chain_id": "TC-20260224-1771931792",
+      "relation": "inspires",
+      "creation_time": 1771931792.9689384
+    }
+  ]
+}

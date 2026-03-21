@@ -1,0 +1,36 @@
+{
+  "model_name": "elr_chat_model",
+  "version": "1.0",
+  "description": "ELR容器协同对话微模型，支持多轮对话和ELR相关功能",
+  "type": "text",
+  "platform": "python",
+  "file_path": "../../examples/elr_chat_model.py",
+  "class_name": "ELRChatModel",
+  "entry_point": "predict",
+  "requirements": [],
+  "resources": {
+    "memory_mb": 50,
+    "cpu_cores": 1,
+    "disk_mb": 5
+  },
+  "capabilities": [
+    "多轮对话支持",
+    "ELR容器相关功能",
+    "命令支持",
+    "对话上下文管理",
+    "无外部依赖",
+    "轻量级 (< 1MB)"
+  ],
+  "commands": [
+    "help",
+    "status",
+    "models",
+    "info",
+    "clear",
+    "exit"
+  ],
+  "config": {
+    "max_context_length": 5,
+    "response_timeout": 5
+  }
+}

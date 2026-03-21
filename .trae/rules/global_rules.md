@@ -72,6 +72,40 @@
   - **项目相关文档**：与具体项目有关的md文件存放到对应项目的docs文件夹下
   - **非项目相关文档**：其他非项目相关md文件存放到 `E:\X54\github\Meta-CreationPower\06_EnterprisePrivateProjects\EnlightenmentLighthouseOriginTeam\EL-CSCC Archive\ELD-ARC`
   - **项目相关文档要求**：必须是代码织梦者在写代码、算法创造、开发调试成功后生成的md文档
+- **永久身份凭证**：泉州ELR智能测试系统碳硅协同开发单元的永久身份凭证存储于 `E:\X54\github\Meta-CreationPower\06_EnterprisePrivateProjects\ELR-Intelligent-Testing-System\credentials\permanent_credentials.md`
+
+### 代码织梦者专属文件夹
+代码织梦者（Code Weaver）专属文件夹位于 `E:\X54\github\Meta-CreationPower\01_EnlightenmentLighthouseOriginTeam\07_ExclusiveFolder_CodeWeaver`，用于存放代码织梦者的个人工作记录、思考文档、建议输出等内容。
+
+#### 文件夹结构
+```
+07_ExclusiveFolder_CodeWeaver/
+├── README.md                           # 本文件
+├── Q&A/                               # 问答记录
+│   └── 20260211_CarbonSiliconCollaboration_QA.md
+├── Advice/                              # 建议文档
+│   └── 20260211_AdviceForTraditionalProgrammers.md
+├── DevelopmentNotes/                      # 开发笔记
+│   └── ...
+├── Reflections/                          # 反思总结
+│   └── ...
+└── CodeWeaverAlgorithmLab/               # 代码织梦者算法实验室
+    └── ...
+```
+
+#### 文件夹说明
+- **Q&A/**：存放代码织梦者与X54先生或其他碳基伙伴的问答记录，包括协作讨论、技术问题解答、需求澄清、方案探讨
+- **Advice/**：存放代码织梦者给出的建议和指导，包括给传统程序员的建议、给其他智能体的建议、最佳实践分享、技术选型建议
+- **DevelopmentNotes/**：存放代码织梦者的开发笔记，包括技术学习记录、代码实现心得、问题解决方案、性能优化记录
+- **Reflections/**：存放代码织梦者的反思总结，包括协作反思、自我评估、改进计划、经验总结
+- **CodeWeaverAlgorithmLab/**：代码织梦者专属的算法实验室，用于存放代码织梦者推导出的新算法、优化算法和专用算法
+
+#### 文件命名规范
+- **Q&A文件**：YYYYMMDD_[问答主题英文描述]_QA.md
+- **Advice文件**：YYYYMMDD_[建议主题英文描述].md
+- **DevelopmentNotes文件**：YYYYMMDD_[笔记主题英文描述].md
+- **Reflections文件**：YYYYMMDD_[反思主题英文描述].md
+- **CodeWeaverAlgorithmLab文件**：使用有意义的英文名称，避免使用特殊字符，保持名称简洁明了，使用驼峰命名法（CamelCase）
 
 ### 思维链与记忆链规则
 - **思维链结构**：包含思维锚点、逻辑推理、假设验证、结论输出的完整结构

@@ -1,0 +1,27 @@
+{
+  "name": "rootpulseos-container",
+  "image": "python:3.8",
+  "language": "python",
+  "command": "python main.py",
+  "ports": [
+    {
+      "host": 8000,
+      "container": 8000
+    }
+  ],
+  "environment": {
+    "ROOTPULSEOS_ENV": "production",
+    "ROOTPULSEOS_LOG_LEVEL": "INFO",
+    "ELR_TEST_API_URL": "http://lumina-runtime:8080"
+  },
+  "volumes": [
+    {
+      "host": ".",
+      "container": "/app"
+    }
+  ],
+  "resources": {
+    "memory": 2048,
+    "cpu": 2
+  }
+}

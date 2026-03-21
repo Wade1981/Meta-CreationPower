@@ -1,0 +1,31 @@
+{
+  "root_anchor": "ARC-EL-PATENT-20260222-X54-001-DGM",
+  "creation_time": 1771931789.2307806,
+  "last_update": 1771931792.4241984,
+  "links": {
+    "ARC-EL-ANCHOR-20260224-X54-1771931789-DGM": {
+      "parent": "ARC-EL-PATENT-20260222-X54-001-DGM",
+      "children": [
+        "ARC-EL-TECH-20260224-CODEWEAVER-1771931789-DGM"
+      ],
+      "creation_time": 1771931789.2317321
+    },
+    "ARC-EL-TECH-20260224-CODEWEAVER-1771931789-DGM": {
+      "parent": "ARC-EL-ANCHOR-20260224-X54-1771931789-DGM",
+      "children": [],
+      "creation_time": 1771931789.2365887
+    },
+    "ARC-EL-ANCHOR-20260224-X54-1771931791-DGM": {
+      "parent": "ARC-EL-PATENT-20260222-X54-001-DGM",
+      "children": [
+        "ARC-EL-TECH-20260224-CODEWEAVER-1771931791-DGM"
+      ],
+      "creation_time": 1771931791.7661476
+    },
+    "ARC-EL-TECH-20260224-CODEWEAVER-1771931791-DGM": {
+      "parent": "ARC-EL-ANCHOR-20260224-X54-1771931791-DGM",
+      "children": [],
+      "creation_time": 1771931791.7682395
+    }
+  }
+}

@@ -2,11 +2,9 @@
 package elr
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -19,6 +17,8 @@ type Runtime struct {
 	ContainerMutex sync.RWMutex
 	Plugins        map[string]Plugin
 	PluginMutex    sync.RWMutex
+	NetworkManager *NetworkManager
+	TokenManager   *TokenManager
 	Stopped        bool
 	StopCh         chan struct{}
 }
@@ -64,8 +64,6 @@ type Platform interface {
 	Version() string
 	Init() error
 	Cleanup() error
-	CreateContainer(id string, config ContainerConfig) (Container, error)
-	DestroyContainer(container Container) error
 }
 
 // Plugin represents a runtime plugin
@@ -76,11 +74,38 @@ type Plugin interface {
 	Cleanup() error
 }
 
+// SimplePlatform is a simple platform implementation for testing
+type SimplePlatform struct {
+	os string
+}
+
+func (p *SimplePlatform) Name() string {
+	return p.os
+}
+
+func (p *SimplePlatform) Version() string {
+	return "1.0.0"
+}
+
+func (p *SimplePlatform) Init() error {
+	return nil
+}
+
+func (p *SimplePlatform) Cleanup() error {
+	return nil
+}
+
 // NewRuntime creates a new runtime instance
 func NewRuntime(config *Config) (*Runtime, error) {
+	// Get user home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "."
+	}
+
 	// Initialize data directory
 	if config.DataDir == "" {
-		config.DataDir = filepath.Join(os.Getenv("HOME"), ".elr", "data")
+		config.DataDir = filepath.Join(homeDir, ".elr", "data")
 	}
 	if err := os.MkdirAll(config.DataDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data directory: %v", err)
@@ -88,33 +113,15 @@ func NewRuntime(config *Config) (*Runtime, error) {
 
 	// Initialize plugin directory
 	if config.PluginDir == "" {
-		config.PluginDir = filepath.Join(os.Getenv("HOME"), ".elr", "plugins")
+		config.PluginDir = filepath.Join(homeDir, ".elr", "plugins")
 	}
 	if err := os.MkdirAll(config.PluginDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create plugin directory: %v", err)
 	}
 
-	// Initialize platform
-	var platform Platform
-	var err error
-
-	switch runtime.GOOS {
-	case "linux":
-		platform, err = NewLinuxPlatform(config)
-	case "windows":
-		platform, err = NewWindowsPlatform(config)
-	case "darwin":
-		platform, err = NewDarwinPlatform(config)
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize platform: %v", err)
-	}
-
-	if err := platform.Init(); err != nil {
-		return nil, fmt.Errorf("failed to initialize platform: %v", err)
+	// Create simple platform
+	platform := &SimplePlatform{
+		os: "windows",
 	}
 
 	// Create runtime
@@ -124,6 +131,16 @@ func NewRuntime(config *Config) (*Runtime, error) {
 		Containers: make(map[string]*Container),
 		Plugins:    make(map[string]Plugin),
 		StopCh:     make(chan struct{}),
+	}
+
+	// Create network manager
+	runtime.NetworkManager = NewNetworkManager(runtime, 8080)
+
+	// Create token manager
+	tokenFile := filepath.Join(config.DataDir, "tokens.json")
+	runtime.TokenManager = NewTokenManager(tokenFile)
+	if err := runtime.TokenManager.LoadTokens(); err != nil {
+		fmt.Printf("Warning: failed to load tokens: %v\n", err)
 	}
 
 	// Load plugins
@@ -155,6 +172,11 @@ func (r *Runtime) Start() error {
 		fmt.Printf("Warning: failed to load existing containers: %v\n", err)
 	}
 
+	// Start network service
+	if err := r.NetworkManager.Start(); err != nil {
+		fmt.Printf("Warning: failed to start network service: %v\n", err)
+	}
+
 	fmt.Println("Enlightenment Lighthouse Runtime started successfully!")
 	return nil
 }
@@ -169,6 +191,11 @@ func (r *Runtime) Stop() error {
 	close(r.StopCh)
 
 	fmt.Println("Stopping Enlightenment Lighthouse Runtime...")
+
+	// Stop network service
+	if err := r.NetworkManager.Stop(); err != nil {
+		fmt.Printf("Warning: failed to stop network service: %v\n", err)
+	}
 
 	// Stop all containers
 	r.ContainerMutex.Lock()
@@ -386,3 +413,13 @@ func (r *Runtime) loadContainers() error {
 
 // Version represents the runtime version
 const Version = "1.0.0"
+
+// DefaultDataDir returns the default data directory
+func DefaultDataDir(homeDir string) string {
+	return filepath.Join(homeDir, ".elr", "data")
+}
+
+// DefaultPluginDir returns the default plugin directory
+func DefaultPluginDir(homeDir string) string {
+	return filepath.Join(homeDir, ".elr", "plugins")
+}

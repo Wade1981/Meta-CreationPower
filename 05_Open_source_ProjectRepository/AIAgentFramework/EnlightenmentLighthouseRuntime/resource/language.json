@@ -1,0 +1,148 @@
+{
+  "en": {
+    "appName": "ELR Desktop Assistant",
+    "trayIconText": "ELR Desktop Assistant",
+    "contextMenu": {
+      "open": "Open ELR Assistant",
+      "chat": "ELR Container Chat",
+      "settings": "ELR Container Settings",
+      "networkStatus": "Network Status",
+      "startAll": "Start All Services",
+      "stopAll": "Stop All Services",
+      "exit": "Exit"
+    },
+    "mainWindow": {
+      "title": "ELR Desktop Assistant",
+      "status": "ELR Status: Not Connected",
+      "checkStatus": "Check Network Status",
+      "containerColumns": {
+        "name": "Name",
+        "status": "Status",
+        "components": "Components/Model",
+        "sandbox": "Sandbox ID",
+        "resourceUsage": "Resource Usage"
+    },
+    "resourceUsage": {
+        "memory": "Memory",
+        "cpu": "CPU",
+        "gpu": "GPU"
+    },
+      "containerStatus": {
+        "created": "created",
+        "running": "running"
+      },
+      "statusInfo": {
+        "connected": "ELR Status: Connected",
+        "containerCount": "Containers loaded: {0}",
+        "runningCount": "Running containers: {0}"
+    },
+      "unknownComponents": "Unknown Components/Model"
+    },
+    "chatWindow": {
+      "title": "ELR Container Chat",
+      "send": "Send",
+      "upload": "Upload File",
+      "selectFile": "Select File",
+      "system": "System: Uploading file: {0}",
+      "you": "You: {0}",
+      "response": "ELR Container: Message received: {0}"
+    },
+    "settingsWindow": {
+        "title": "ELR Container Settings",
+        "tokenInfo": "Carbon Administrator: X54sir1981\nIdentity: Super Administrator\nToken ID: ee9ba256 (7 days remaining)",
+        "desktopApi": "Desktop API:",
+        "publicApi": "Public API:",
+        "modelService": "Model Service:",
+        "microModel": "Micro Model:",
+        "startApi": "Start API",
+        "startAll": "Start All APIs",
+        "stopAll": "Stop All APIs",
+        "createAdmin": "Create Admin",
+        "updateToken": "Update Token",
+        "adminCount": "2 administrators currently",
+        "viewAdmins": "View Admins",
+        "auto": "Auto",
+        "save": "Save"
+    },
+    "messages": {
+      "networkStatus": "Network Status",
+      "error": "Error: ELR script does not exist!",
+      "failedStatus": "Failed to get network status: {0}",
+      "failedStart": "Failed to start services: {0}",
+      "failedStop": "Failed to stop services: {0}"
+    }
+  },
+  "zh": {
+    "appName": "ELR 看版",
+    "trayIconText": "ELR 看版",
+    "contextMenu": {
+      "open": "打开 ELR 看版",
+      "chat": "ELR 容器对话",
+      "settings": "ELR 容器设置",
+      "networkStatus": "网络状态",
+      "startAll": "启动所有服务",
+      "stopAll": "停止所有服务",
+      "exit": "退出"
+    },
+    "mainWindow": {
+      "title": "ELR 看版",
+      "status": "ELR 状态: 未连接",
+      "checkStatus": "查看网络状态",
+      "containerColumns": {
+        "name": "名称",
+        "status": "状态",
+        "components": "装载组件/模型",
+        "sandbox": "沙箱编号",
+        "resourceUsage": "运行消耗"
+    },
+    "resourceUsage": {
+        "memory": "内存",
+        "cpu": "CPU",
+        "gpu": "GPU"
+    },
+      "containerStatus": {
+        "created": "已创建",
+        "running": "运行中"
+      },
+      "statusInfo": {
+        "connected": "ELR 状态: 已连接",
+        "containerCount": "容器装载个数: {0}",
+        "runningCount": "正常运行个数: {0}"
+    },
+      "unknownComponents": "未知组件/模型"
+    },
+    "chatWindow": {
+      "title": "ELR 容器对话",
+      "send": "发送",
+      "upload": "上传文件",
+      "selectFile": "选择文件",
+      "system": "系统: 上传文件: {0}",
+      "you": "你: {0}",
+      "response": "ELR 容器: 收到消息: {0}"
+    },
+    "settingsWindow": {
+        "title": "ELR 容器设置",
+        "tokenInfo": "碳基管理员: X54sir1981\n身份: 超级管理员\n令牌ID: ee9ba256 (还有7天过期)",
+        "desktopApi": "Desktop API:",
+        "publicApi": "Public API:",
+        "modelService": "Model Service:",
+        "microModel": "Micro Model:",
+        "startApi": "启动API",
+        "startAll": "启动全部API",
+        "stopAll": "关闭全部API",
+        "createAdmin": "创建管理者",
+        "updateToken": "更新令牌",
+        "adminCount": "目前有2个管理员",
+        "viewAdmins": "查看管理员",
+        "auto": "自动推荐",
+        "save": "保存设置"
+    },
+    "messages": {
+      "networkStatus": "网络状态",
+      "error": "错误：ELR 脚本不存在！",
+      "failedStatus": "获取网络状态失败: {0}",
+      "failedStart": "启动服务失败: {0}",
+      "failedStop": "停止服务失败: {0}"
+    }
+  }
+}

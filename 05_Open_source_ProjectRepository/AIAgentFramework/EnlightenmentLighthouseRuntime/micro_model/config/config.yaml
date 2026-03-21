@@ -1,7 +1,7 @@
 # 服务器配置
 server:
-  host: "0.0.0.0"
-  port: 8080
+  host: "127.0.0.1"
+  port: 9005
 
 # 容器配置
 container:
@@ -13,7 +13,7 @@ container:
 # 模型配置
 model:
   model_dir: "./model/models"
-  default_model: "elr-light-1.0"
+  default_model: "elr-chat"
   download_timeout: 300
 
 # 沙箱配置

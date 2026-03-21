@@ -1,0 +1,13 @@
+# RootPulseOS Python Dependencies
+
+# 核心依赖
+requests==2.32.5
+
+# 可选依赖
+pytest==7.4.0
+pytest-cov==4.1.0
+
+# 开发依赖
+black==23.3.0
+flake8==6.0.0
+isort==5.12.0

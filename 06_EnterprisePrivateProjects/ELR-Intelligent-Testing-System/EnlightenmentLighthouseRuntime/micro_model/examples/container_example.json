@@ -1,0 +1,8 @@
+{
+  "container_name": "gpt2-container",
+  "model_id": "gpt2",
+  "resources": {
+    "cpu": 1,
+    "memory": "1G"
+  }
+}

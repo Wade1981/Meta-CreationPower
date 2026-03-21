@@ -1,0 +1,37 @@
+# RootPulseOS Docker Compose Configuration
+
+version: '3.8'
+
+services:
+  rootpulseos:
+    build: .
+    container_name: rootpulseos
+    ports:
+      - "8000:8000"
+    environment:
+      - ROOTPULSEOS_ENV=production
+      - ROOTPULSEOS_LOG_LEVEL=INFO
+      - ELR_TEST_API_URL=http://lumina-runtime:8080
+    volumes:
+      - ./data:/app/data
+    networks:
+      - lumina-network
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  lumina-network:
+    external: true
+    name: aiagentframework_lumina-network
+
+volumes:
+  rootpulseos-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./data
+      o: bind

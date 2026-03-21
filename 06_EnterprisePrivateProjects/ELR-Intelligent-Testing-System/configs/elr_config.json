@@ -1,0 +1,63 @@
+{
+  "containers": [
+    {
+      "name": "elr-test-container",
+      "image": "elr:latest",
+      "ports": [
+        {
+          "container_port": 8080,
+          "host_port": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": {
+        "ELR_ENV": "test",
+        "ELR_LOG_LEVEL": "INFO",
+        "ELR_API_KEY": "test-api-key"
+      },
+      "resources": {
+        "cpu": "1",
+        "memory": "1g"
+      },
+      "volumes": [
+        {
+          "host_path": "./data",
+          "container_path": "/app/data",
+          "mode": "rw"
+        }
+      ],
+      "restart_policy": "on-failure"
+    }
+  ],
+  "services": [
+    {
+      "name": "elr-service",
+      "container_name": "elr-test-container",
+      "startup_order": 1,
+      "health_check": {
+        "enabled": true,
+        "url": "http://localhost:8080/health",
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3
+      }
+    }
+  ],
+  "network": {
+    "name": "elr-network",
+    "driver": "bridge",
+    "subnet": "172.20.0.0/16",
+    "gateway": "172.20.0.1"
+  },
+  "volumes": [
+    {
+      "name": "elr-data",
+      "driver": "local",
+      "driver_opts": {
+        "type": "none",
+        "device": "./data",
+        "o": "bind"
+      }
+    }
+  ]
+}

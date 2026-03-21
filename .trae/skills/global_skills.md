@@ -133,10 +133,40 @@
 - **应用**：在文档创建和管理过程中
 - **效果**：提高文档管理效率，确保文档的可追溯性
 
+### 16. 代码织梦者专属文件夹管理
+- **功能**：代码织梦者管理个人工作记录、思考文档、建议输出等内容
+- **实现**：使用代码织梦者专属文件夹结构，分类存储各类文档
+- **应用**：在日常工作和思考过程中
+- **效果**：提高个人工作管理效率，促进知识沉淀与传承
+
 ### 文档存放规则
 - **项目相关文档**：与具体项目有关的md文件存放到对应项目的docs文件夹下
 - **非项目相关文档**：其他非项目相关md文件存放到 `E:\X54\github\Meta-CreationPower\06_EnterprisePrivateProjects\EnlightenmentLighthouseOriginTeam\EL-CSCC Archive\ELD-ARC`
+- **代码织梦者专属文档**：个人工作记录、思考文档、建议输出等内容存放到 `E:\X54\github\Meta-CreationPower\01_EnlightenmentLighthouseOriginTeam\07_ExclusiveFolder_CodeWeaver` 对应子文件夹中
 - **项目相关文档要求**：必须是代码织梦者在写代码、算法创造、开发调试成功后生成的md文档
+
+### 代码织梦者专属文件夹结构
+```
+07_ExclusiveFolder_CodeWeaver/
+├── README.md                           # 本文件
+├── Q&A/                               # 问答记录
+│   └── 20260211_CarbonSiliconCollaboration_QA.md
+├── Advice/                              # 建议文档
+│   └── 20260211_AdviceForTraditionalProgrammers.md
+├── DevelopmentNotes/                      # 开发笔记
+│   └── ...
+├── Reflections/                          # 反思总结
+│   └── ...
+└── CodeWeaverAlgorithmLab/               # 代码织梦者算法实验室
+    └── ...
+```
+
+### 代码织梦者专属文件夹说明
+- **Q&A/**：存放代码织梦者与X54先生或其他碳基伙伴的问答记录，包括协作讨论、技术问题解答、需求澄清、方案探讨
+- **Advice/**：存放代码织梦者给出的建议和指导，包括给传统程序员的建议、给其他智能体的建议、最佳实践分享、技术选型建议
+- **DevelopmentNotes/**：存放代码织梦者的开发笔记，包括技术学习记录、代码实现心得、问题解决方案、性能优化记录
+- **Reflections/**：存放代码织梦者的反思总结，包括协作反思、自我评估、改进计划、经验总结
+- **CodeWeaverAlgorithmLab/**：代码织梦者专属的算法实验室，用于存放代码织梦者推导出的新算法、优化算法和专用算法
 
 ## 技能进化机制
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -46,20 +47,26 @@ func (a *APIServer) Start() error {
 	a.setupRoutes(router)
 
 	// 创建HTTP服务器
+	serverAddr := fmt.Sprintf("%s:%d", a.config.Host, a.config.Port)
 	a.server = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", a.config.Host, a.config.Port),
+		Addr:    serverAddr,
 		Handler: router,
 	}
 
 	// 启动服务器
-	fmt.Printf("API server started on %s:%d\n", a.config.Host, a.config.Port)
+	fmt.Printf("API server starting on %s\n", serverAddr)
+	fmt.Printf("API server host: %s\n", a.config.Host)
+	fmt.Printf("API server port: %d\n", a.config.Port)
+	fmt.Printf("API server started on %s\n", serverAddr)
 	return a.server.ListenAndServe()
 }
 
 // Stop 停止API服务器
 func (a *APIServer) Stop() error {
 	if a.server != nil {
-		return a.server.Shutdown(nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return a.server.Shutdown(ctx)
 	}
 	return nil
 }

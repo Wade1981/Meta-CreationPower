@@ -1,0 +1,29 @@
+{
+    "RUNTIME_START_TIME":  "2026-03-06T11:24:13.1940347+08:00",
+    "CONTAINERS":  [
+                       {
+                           "Status":  "created",
+                           "Created":  "2026-03-06T11:24:11.4817345+08:00",
+                           "Name":  "test-container",
+                           "ID":  "elr-1234567890",
+                           "Image":  "ubuntu:latest"
+                       },
+                       {
+                           "Image":  "python:3.9",
+                           "ID":  "elr-0987654321",
+                           "Started":  "2026-03-06T11:24:11.4817345+08:00",
+                           "Created":  "2026-03-06T11:24:11.4817345+08:00",
+                           "Name":  "python-app",
+                           "Status":  "running"
+                       },
+                       {
+                           "Image":  "ubuntu:latest",
+                           "ID":  "elr-112418724",
+                           "Started":  "2026-03-06T11:24:18.7261684+08:00",
+                           "Created":  "2026-03-06T11:24:18.7240337+08:00",
+                           "Name":  "container-112418",
+                           "Status":  "running"
+                       }
+                   ],
+    "RUNTIME_STARTED":  true
+}

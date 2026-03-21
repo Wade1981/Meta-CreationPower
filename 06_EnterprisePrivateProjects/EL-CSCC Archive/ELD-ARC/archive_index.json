@@ -1,0 +1,35 @@
+{
+  "root_anchor": "ARC-EL-PATENT-20260222-X54-001-DGM",
+  "creation_time": 1771931788.0507843,
+  "last_update": 1771931792.4211087,
+  "archives": {
+    "ARC-EL-ANCHOR-20260224-X54-1771931789-DGM": {
+      "title": "测试思维锚点",
+      "author": "X54",
+      "type": "ANCHOR",
+      "creation_time": 1771931789.2317321,
+      "file_path": "../EL-CSCC Archive/ELD-ARC\\ARC-EL-ANCHOR-20260224-X54-1771931789-DGM.json"
+    },
+    "ARC-EL-TECH-20260224-CODEWEAVER-1771931789-DGM": {
+      "title": "测试技术方案",
+      "author": "CodeWeaver",
+      "type": "TECH",
+      "creation_time": 1771931789.2365887,
+      "file_path": "../EL-CSCC Archive/ELD-ARC\\ARC-EL-TECH-20260224-CODEWEAVER-1771931789-DGM.json"
+    },
+    "ARC-EL-ANCHOR-20260224-X54-1771931791-DGM": {
+      "title": "测试思维锚点",
+      "author": "X54",
+      "type": "ANCHOR",
+      "creation_time": 1771931791.7661476,
+      "file_path": "../EL-CSCC Archive/ELD-ARC\\ARC-EL-ANCHOR-20260224-X54-1771931791-DGM.json"
+    },
+    "ARC-EL-TECH-20260224-CODEWEAVER-1771931791-DGM": {
+      "title": "测试技术方案",
+      "author": "CodeWeaver",
+      "type": "TECH",
+      "creation_time": 1771931791.7682395,
+      "file_path": "../EL-CSCC Archive/ELD-ARC\\ARC-EL-TECH-20260224-CODEWEAVER-1771931791-DGM.json"
+    }
+  }
+}

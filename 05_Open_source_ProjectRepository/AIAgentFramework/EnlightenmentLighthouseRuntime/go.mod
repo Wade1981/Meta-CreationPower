@@ -2,6 +2,4 @@ module github.com/Wade1981/Meta-CreationPower/05_Open_source_ProjectRepository/A
 
 go 1.17
 
-require (
-	gopkg.in/yaml.v2 v2.4.0
-)
+require gopkg.in/yaml.v2 v2.4.0

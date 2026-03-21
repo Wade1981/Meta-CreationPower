@@ -1,0 +1,126 @@
+{
+  "project_id": "DAFE",
+  "project_name": "数字资产工厂引擎",
+  "description": "基于碳硅协同的数字资产工厂引擎项目",
+  "creation_time": 1771931791.3193262,
+  "last_update": 1771931793.3905172,
+  "carbon_silicon_team": {
+    "carbon_members": [
+      {
+        "id": "X54",
+        "name": "X54先生",
+        "role": "思维锚点提供者",
+        "joined_at": 1771931791.3204885
+      }
+    ],
+    "silicon_members": [
+      {
+        "id": "CodeWeaver",
+        "name": "代码织梦者",
+        "role": "硅基智能代码编织者",
+        "joined_at": 1771931791.3215926
+      }
+    ],
+    "industry_experts": []
+  },
+  "development_process": {
+    "stages": [
+      {
+        "stage_id": "anchor",
+        "name": "锚点确立",
+        "description": "碳基成员提出核心构想和目标",
+        "deliverables": [
+          "思维锚点文档"
+        ],
+        "status": "completed"
+      },
+      {
+        "stage_id": "architecture",
+        "name": "架构设计",
+        "description": "碳硅成员共同设计系统架构和技术路径",
+        "deliverables": [
+          "技术架构文档"
+        ],
+        "status": "completed"
+      },
+      {
+        "stage_id": "implementation",
+        "name": "代码实现",
+        "description": "硅基成员负责具体代码实现",
+        "deliverables": [
+          "工程代码",
+          "测试用例"
+        ],
+        "status": "completed"
+      },
+      {
+        "stage_id": "validation",
+        "name": "验证测试",
+        "description": "碳硅成员共同验证功能和性能",
+        "deliverables": [
+          "测试报告",
+          "性能评估"
+        ],
+        "status": "in_progress"
+      },
+      {
+        "stage_id": "optimization",
+        "name": "迭代优化",
+        "description": "根据反馈持续优化与改进",
+        "deliverables": [
+          "优化方案",
+          "变更记录"
+        ],
+        "status": "pending"
+      }
+    ]
+  },
+  "archive_config": {
+    "root_anchor": "ARC-EL-PATENT-20260222-X54-001-DGM",
+    "archive_types": [
+      "ANCHOR",
+      "TECH",
+      "DEV",
+      "PM",
+      "APP"
+    ],
+    "default_author": ""
+  },
+  "communication": {
+    "daily_standup": "10:00",
+    "weekly_meeting": "Friday 14:00",
+    "monthly_review": "Last Friday of month 14:00",
+    "tools": [
+      "即时通讯",
+      "在线文档",
+      "版本控制",
+      "视频会议"
+    ]
+  },
+  "performance": {
+    "evaluation_cycle": "monthly",
+    "evaluation_dims": {
+      "carbon_members": [
+        "思维锚点质量",
+        "架构设计合理性",
+        "价值导向清晰度",
+        "跨行业知识迁移",
+        "团队领导力"
+      ],
+      "silicon_members": [
+        "技术实现质量",
+        "实现效率",
+        "技术创新",
+        "代码可维护性",
+        "问题解决能力"
+      ],
+      "team": [
+        "项目目标达成",
+        "开发流程规范性",
+        "档案管理完整性",
+        "记忆链构建质量",
+        "碳硅协同效果"
+      ]
+    }
+  }
+}

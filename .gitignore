@@ -49,7 +49,6 @@ temp/
 *.swp
 
 # 私有项目库
-06_EnterprisePrivateProjects/
 
 # 不提交到GitHub的文件夹
 .trae/
@@ -58,6 +57,5 @@ build/
 frontend/
 generated_code/
 tests/
-06_EnterprisePrivateProjects/
 TechArt_Hammer_Designer_QT.files/
 数字资产知启工厂引擎.files/

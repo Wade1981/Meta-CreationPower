@@ -1,0 +1,49 @@
+{
+  "system": {
+    "name": "ELR 智能测试系统",
+    "version": "1.0.0",
+    "log_level": "INFO",
+    "data_dir": "./data",
+    "temp_dir": "./temp"
+  },
+  "test": {
+    "timeout": 300, // 测试超时时间（秒）
+    "parallel": true, // 是否并行执行测试
+    "max_parallel": 4, // 最大并行测试数
+    "retry_count": 3 // 测试失败重试次数
+  },
+  "elr": {
+    "base_url": "http://localhost:8080",
+    "api_version": "v1",
+    "timeout": 60, // ELR API 超时时间（秒）
+    "retry_count": 3 // ELR API 失败重试次数
+  },
+  "database": {
+    "type": "sqlite",
+    "path": "./data/test.db",
+    "max_connections": 10
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "debug": false,
+    "cors": true
+  },
+  "container": {
+    "image": "elr:latest",
+    "default_memory": "1g",
+    "default_cpu": "1",
+    "network": "elr-network"
+  },
+  "notification": {
+    "enabled": false,
+    "email": {
+      "smtp_server": "smtp.example.com",
+      "smtp_port": 587,
+      "username": "",
+      "password": "",
+      "from": "elr-test@example.com",
+      "to": ["admin@example.com"]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "chain_id": "TC-20260224-1771931790",
+  "title": "数字资产工厂引擎架构",
+  "author": "X54",
+  "description": "数字资产工厂引擎的整体架构设计思维链",
+  "creation_time": 1771931790.7550852,
+  "last_update": 1771931790.8328965,
+  "nodes": [
+    {
+      "node_id": "N-0-1771931790",
+      "content": "数字资产应该是动态可复用的生产要素",
+      "type": "idea",
+      "creation_time": 1771931790.7574418,
+      "metadata": {}
+    },
+    {
+      "node_id": "N-1-1771931790",
+      "content": "传统数字资产定义过于静态",
+      "type": "reasoning",
+      "creation_time": 1771931790.759333,
+      "metadata": {}
+    }
+  ],
+  "edges": [
+    {
+      "source": "N-0-1771931790",
+      "target": "N-1-1771931790",
+      "relation_type": "leads_to",
+      "creation_time": 1771931790.7612095
+    }
+  ],
+  "memory_links": [
+    {
+      "memory_chain_id": "MC-DAFE-20260224-1771931790",
+      "relation": "inspires",
+      "creation_time": 1771931790.8328948
+    }
+  ]
+}

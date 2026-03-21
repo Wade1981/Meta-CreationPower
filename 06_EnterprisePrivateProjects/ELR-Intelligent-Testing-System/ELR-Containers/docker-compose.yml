@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  elr-test-container:
+    image: elr:latest
+    container_name: elr-test-container
+    ports:
+      - "8080:8080"
+    environment:
+      - ELR_ENV=test
+      - ELR_LOG_LEVEL=INFO
+      - ELR_API_KEY=test-api-key
+    volumes:
+      - ./data:/app/data
+    networks:
+      - elr-network
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  elr-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+
+volumes:
+  elr-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ./data
+      o: bind
