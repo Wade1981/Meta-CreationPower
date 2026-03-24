@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"github.com/Wade1981/Meta-CreationPower/05_Open_source_ProjectRepository/AIAgentFramework/EnlightenmentLighthouseRuntime/elr"
@@ -77,16 +78,154 @@ func (p *DarwinPlatform) Cleanup() error {
 }
 
 // CreateContainer creates a new container for macOS
-func (p *DarwinPlatform) CreateContainer(id string, config elr.ContainerConfig) (elr.Container, error) {
-	// TODO: Implement container creation for macOS
-	// This is a placeholder for now
-	return elr.Container{}, nil
+func (p *DarwinPlatform) CreateContainer(c *elr.Container) error {
+	fmt.Printf("Creating container %s on macOS...\n", c.ID)
+	
+	// Create container directory structure
+	rootDir := filepath.Join(c.Dir, "rootfs")
+	if err := os.MkdirAll(rootDir, 0755); err != nil {
+		return err
+	}
+	
+	// Create standard directories
+	dirs := []string{
+		"bin", "etc", "home", "lib", "lib64", "proc", "sys", "tmp", "usr", "var",
+	}
+	
+	for _, dir := range dirs {
+		dirPath := filepath.Join(rootDir, dir)
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			return err
+		}
+	}
+	
+	// 设置文件系统隔离
+	if c.FileSystemIsolation {
+		if err := p.SetupFileSystemIsolation(c); err != nil {
+			return err
+		}
+	}
+	
+	return nil
 }
 
-// DestroyContainer destroys a container for macOS
-func (p *DarwinPlatform) DestroyContainer(container elr.Container) error {
-	// TODO: Implement container destruction for macOS
-	// This is a placeholder for now
+// StartContainer starts a container for macOS
+func (p *DarwinPlatform) StartContainer(c *elr.Container) error {
+	fmt.Printf("Starting container %s on macOS...\n", c.ID)
+	
+	// 挂载文件系统
+	if c.FileSystemIsolation {
+		if err := p.MountFileSystem(c); err != nil {
+			return err
+		}
+	}
+	
+	// 模拟进程创建
+	c.PID = os.Getpid() + 1000
+	
+	return nil
+}
+
+// StopContainer stops a container for macOS
+func (p *DarwinPlatform) StopContainer(c *elr.Container) error {
+	fmt.Printf("Stopping container %s on macOS...\n", c.ID)
+	
+	// 卸载文件系统
+	if c.FileSystemIsolation {
+		if err := p.UnmountFileSystem(c); err != nil {
+			return err
+		}
+	}
+	
+	// 模拟进程停止
+	c.PID = 0
+	
+	return nil
+}
+
+// PauseContainer pauses a container for macOS
+func (p *DarwinPlatform) PauseContainer(c *elr.Container) error {
+	fmt.Printf("Pausing container %s on macOS...\n", c.ID)
+	// TODO: Implement macOS-specific container pause
+	return nil
+}
+
+// UnpauseContainer unpauses a container for macOS
+func (p *DarwinPlatform) UnpauseContainer(c *elr.Container) error {
+	fmt.Printf("Unpausing container %s on macOS...\n", c.ID)
+	// TODO: Implement macOS-specific container unpause
+	return nil
+}
+
+// DeleteContainer deletes a container for macOS
+func (p *DarwinPlatform) DeleteContainer(c *elr.Container) error {
+	fmt.Printf("Deleting container %s on macOS...\n", c.ID)
+	// TODO: Implement macOS-specific container deletion
+	return nil
+}
+
+// SetupFileSystemIsolation sets up file system isolation for a container
+func (p *DarwinPlatform) SetupFileSystemIsolation(c *elr.Container) error {
+	fmt.Printf("Setting up file system isolation for container %s...\n", c.ID)
+	
+	// 确定根文件系统路径
+	rootFSPath := c.RootFSPath
+	if rootFSPath == "" {
+		rootFSPath = filepath.Join(c.Dir, "rootfs")
+	}
+	
+	// 确保根文件系统目录存在
+	if err := os.MkdirAll(rootFSPath, 0755); err != nil {
+		return err
+	}
+	
+	// 创建基本的文件系统结构
+	dirs := []string{
+		"bin", "etc", "home", "lib", "lib64", "proc", "sys", "tmp", "usr", "var",
+	}
+	
+	for _, dir := range dirs {
+		dirPath := filepath.Join(rootFSPath, dir)
+		if err := os.MkdirAll(dirPath, 0755); err != nil {
+			return err
+		}
+	}
+	
+	// 创建基本的配置文件
+	hostsFile := filepath.Join(rootFSPath, "etc", "hosts")
+	hostsContent := "127.0.0.1 localhost\n::1 localhost\n"
+	if err := os.WriteFile(hostsFile, []byte(hostsContent), 0644); err != nil {
+		return err
+	}
+	
+	passwdFile := filepath.Join(rootFSPath, "etc", "passwd")
+	passwdContent := "root:x:0:0:root:/root:/bin/sh\n"
+	if err := os.WriteFile(passwdFile, []byte(passwdContent), 0644); err != nil {
+		return err
+	}
+	
+	// 更新容器的根文件系统路径
+	c.RootFSPath = rootFSPath
+	
+	return nil
+}
+
+// MountFileSystem mounts the file system for a container
+func (p *DarwinPlatform) MountFileSystem(c *elr.Container) error {
+	fmt.Printf("Mounting file system for container %s...\n", c.ID)
+	
+	// 在macOS上，我们可以使用chroot和sandbox来实现文件系统隔离
+	// 实际生产环境中，可能需要使用更复杂的挂载方案
+	
+	// 这里只是模拟挂载过程
+	return nil
+}
+
+// UnmountFileSystem unmounts the file system for a container
+func (p *DarwinPlatform) UnmountFileSystem(c *elr.Container) error {
+	fmt.Printf("Unmounting file system for container %s...\n", c.ID)
+	
+	// 这里只是模拟卸载过程
 	return nil
 }
 

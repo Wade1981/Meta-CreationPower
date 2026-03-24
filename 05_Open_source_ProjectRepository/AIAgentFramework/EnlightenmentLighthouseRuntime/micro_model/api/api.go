@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"micro-model/config"
-	"micro-model/container"
-	"micro-model/model"
-	"micro-model/monitor"
-	"micro-model/sandbox"
+	"micro_model/config"
+	"micro_model/container"
+	"micro_model/model"
+	"micro_model/monitor"
+	"micro_model/sandbox"
 )
 
 // APIServer API服务器

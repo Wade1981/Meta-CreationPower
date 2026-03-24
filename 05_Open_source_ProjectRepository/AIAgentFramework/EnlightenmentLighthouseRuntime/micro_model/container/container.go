@@ -7,7 +7,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"micro-model/config"
+	"micro_model/config"
 )
 
 // ContainerManager 容器管理器

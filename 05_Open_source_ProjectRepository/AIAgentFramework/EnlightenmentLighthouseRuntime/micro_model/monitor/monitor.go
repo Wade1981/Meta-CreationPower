@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"micro-model/config"
+	"micro_model/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

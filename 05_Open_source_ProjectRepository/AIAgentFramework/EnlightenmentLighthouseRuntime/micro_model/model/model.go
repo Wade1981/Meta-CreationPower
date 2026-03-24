@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	"micro-model/config"
+	"micro_model/config"
 )
 
 // ModelManager 模型管理器

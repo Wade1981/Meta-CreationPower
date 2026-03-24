@@ -1,0 +1,13 @@
+﻿﻿﻿﻿{
+    "sandboxes":  [
+                      {
+                          "models":  [
+
+                                     ],
+                          "status":  "running",
+                          "created":  "2026-03-23 02:48:10",
+                          "id":  "sandbox-789012",
+                          "container":  "running-container"
+                      }
+                  ]
+}

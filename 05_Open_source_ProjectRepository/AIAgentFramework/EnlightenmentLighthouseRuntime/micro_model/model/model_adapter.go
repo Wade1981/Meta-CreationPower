@@ -115,3 +115,36 @@ func isLinux() bool {
 func isWindows() bool {
 	return strings.Contains(strings.ToLower(os.Getenv("OS")), "windows")
 }
+
+// Run 运行模型
+func (a *ModelAdapter) Run(input string) (string, error) {
+	// 检查推理入口点是否存在
+	inferenceCmd, ok := a.Properties.EntryPoints["inference"]
+	if !ok {
+		// 如果没有推理入口点，使用默认实现
+		return fmt.Sprintf("Processed input: %s", input), nil
+	}
+
+	// 解析命令
+	parts := strings.Fields(inferenceCmd)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("invalid inference command")
+	}
+
+	// 执行命令
+	command := parts[0]
+	args := parts[1:]
+	
+	// 添加输入作为参数
+	args = append(args, input)
+	
+	execCmd := exec.Command(command, args...)
+	
+	// 捕获输出
+	output, err := execCmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to run model: %v, output: %s", err, string(output))
+	}
+
+	return string(output), nil
+}

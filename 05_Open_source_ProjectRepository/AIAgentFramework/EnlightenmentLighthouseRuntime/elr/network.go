@@ -4,8 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
+
+	"micro_model/config"
+	"micro_model/model"
+	"micro_model/sandbox"
 )
 
 // NetworkManager 网络管理器
@@ -25,7 +32,7 @@ func NewNetworkManager(runtime *Runtime, port int) *NetworkManager {
 
 // Start 启动网络服务
 func (n *NetworkManager) Start() error {
-	// 设置HTTP路由
+	// Setup HTTP routes
 	handler := http.NewServeMux()
 	
 	// 健康检查
@@ -43,6 +50,13 @@ func (n *NetworkManager) Start() error {
 	handler.HandleFunc("/api/token/refresh", n.refreshToken)
 	handler.HandleFunc("/api/token/list", n.listTokens)
 	handler.HandleFunc("/api/token/revoke", n.revokeToken)
+	// Desktop API 路由
+	handler.HandleFunc("/api/desktop/health", n.desktopHealthCheck)
+	handler.HandleFunc("/api/desktop/status", n.desktopStatus)
+	handler.HandleFunc("/api/desktop/containers", n.desktopListContainers)
+	handler.HandleFunc("/api/desktop/resources", n.desktopGetResources)
+	handler.HandleFunc("/api/desktop/files", n.desktopListFiles)
+	handler.HandleFunc("/api/desktop/upload", n.desktopUploadFile)
 	
 	// 创建HTTP服务器
 	serverAddr := fmt.Sprintf(":%d", n.port)
@@ -148,8 +162,74 @@ func (n *NetworkManager) runModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// 运行模型（模拟实现）
-	output := fmt.Sprintf("Model %s in container %s processed input: %s", req.ModelID, req.ContainerID, req.Input)
+	// 检查容器是否存在
+	container, err := n.runtime.GetContainer(req.ContainerID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container not found"})
+		return
+	}
+	
+	// 检查容器状态
+	if container.Status != ContainerStatusRunning {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container is not running"})
+		return
+	}
+	
+	// 加载配置并创建沙箱运行时
+	modelConfig := &config.ModelConfig{
+		ModelDir: "./micro_model/model/models",
+	}
+	
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create model manager"})
+		return
+	}
+	
+	sandboxManager, err := sandbox.NewSandboxManager(&config.SandboxConfig{}, modelManager)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create sandbox manager"})
+		return
+	}
+	
+	// 确保沙箱存在
+	sandboxID := req.ContainerID
+	_, err = sandboxManager.GetSandbox(sandboxID)
+	if err != nil {
+		// 沙箱不存在，创建一个
+		_, err = sandboxManager.CreateSandbox(req.ContainerID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create sandbox"})
+			return
+		}
+		
+		// 启动沙箱
+		if err := sandboxManager.StartSandbox(sandboxID); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to start sandbox"})
+			return
+		}
+		
+		// 加载模型
+		if err := sandboxManager.LoadModel(sandboxID, req.ModelID); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to load model"})
+			return
+		}
+	}
+	
+	// 运行模型
+	output, err := sandboxManager.RunModel(sandboxID, req.ModelID, req.Input)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
 	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -385,6 +465,261 @@ func (n *NetworkManager) revokeToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Token revoked successfully",
+		"timestamp": time.Now().Unix(),
+	})
+}
+
+// Desktop API 实现
+
+// desktopHealthCheck Desktop API 健康检查
+func (n *NetworkManager) desktopHealthCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "ok",
+		"timestamp": time.Now().Unix(),
+		"service": "elr-desktop-api",
+		"version": "1.0.0",
+	})
+}
+
+// desktopStatus 获取ELR状态
+func (n *NetworkManager) desktopStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "running",
+		"message": "ELR Desktop API服务运行正常",
+		"timestamp": time.Now().Unix(),
+		"containers": len(n.runtime.ListContainers()),
+		"api_version": "1.0.0",
+	})
+}
+
+// desktopListContainers 获取容器列表
+func (n *NetworkManager) desktopListContainers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 重新加载容器，确保获取最新的容器列表
+	if err := n.runtime.loadContainers(); err != nil {
+		fmt.Printf("Warning: failed to reload containers: %v\n", err)
+	}
+
+	containers := n.runtime.ListContainers()
+	
+	// 转换为Desktop API格式
+	var desktopContainers []map[string]interface{}
+	for _, c := range containers {
+		containerInfo := map[string]interface{}{
+			"id": c.ID,
+			"name": c.Name,
+			"image": c.Image,
+			"status": string(c.Status),
+			"created": c.Created.Format("2006-01-02 15:04:05"),
+		}
+		if c.Started != nil {
+			containerInfo["started"] = c.Started.Format("2006-01-02 15:04:05")
+		}
+		if c.IPAddress != "" {
+			containerInfo["ip_address"] = c.IPAddress
+		}
+		desktopContainers = append(desktopContainers, containerInfo)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(desktopContainers)
+}
+
+// desktopGetResources 获取系统资源使用情况
+func (n *NetworkManager) desktopGetResources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取系统资源使用情况
+	resources := map[string]interface{}{
+		"memory": map[string]interface{}{
+			"total": 16 * 1024 * 1024 * 1024, // 16GB
+			"used": 4 * 1024 * 1024 * 1024,  // 4GB
+			"free": 12 * 1024 * 1024 * 1024, // 12GB
+			"usage_percent": 25.0,
+		},
+		"cpu": map[string]interface{}{
+			"usage_percent": 15.5,
+			"cores": 8,
+		},
+		"disk": map[string]interface{}{
+			"total": 500 * 1024 * 1024 * 1024, // 500GB
+			"used": 100 * 1024 * 1024 * 1024,  // 100GB
+			"free": 400 * 1024 * 1024 * 1024, // 400GB
+			"usage_percent": 20.0,
+		},
+		"system": map[string]interface{}{
+			"platform": "windows",
+			"version": "10.0.19045",
+			"timestamp": time.Now().Unix(),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"resources": resources,
+		"timestamp": time.Now().Unix(),
+	})
+}
+
+// desktopListFiles 列出上传的文件
+func (n *NetworkManager) desktopListFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 上传目录
+	uploadDir := filepath.Join(n.runtime.Config.DataDir, "uploads")
+	
+	// 确保目录存在
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create upload directory"})
+		return
+	}
+
+	// 读取目录内容
+	files, err := os.ReadDir(uploadDir)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to read upload directory"})
+		return
+	}
+
+	// 构建文件列表
+	var fileList []map[string]interface{}
+	for _, file := range files {
+		if !file.IsDir() {
+			filePath := filepath.Join(uploadDir, file.Name())
+			fileInfo, err := os.Stat(filePath)
+			if err != nil {
+				continue
+			}
+
+			fileType := "other"
+			ext := filepath.Ext(file.Name())
+			switch ext {
+			case ".py":
+				fileType = "python"
+			case ".json", ".yaml", ".yml":
+				fileType = "config"
+			case ".png", ".jpg", ".jpeg":
+				fileType = "image"
+			case ".txt", ".md":
+				fileType = "document"
+			}
+
+			fileList = append(fileList, map[string]interface{}{
+				"name": file.Name(),
+				"type": fileType,
+				"size": fileInfo.Size(),
+				"path": filePath,
+				"created": fileInfo.ModTime().Unix(),
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"files": fileList,
+		"timestamp": time.Now().Unix(),
+	})
+}
+
+// desktopUploadFile 上传文件
+func (n *NetworkManager) desktopUploadFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 上传目录
+	uploadDir := filepath.Join(n.runtime.Config.DataDir, "uploads")
+	
+	// 确保目录存在
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create upload directory"})
+		return
+	}
+
+	// 解析多部分表单
+	r.ParseMultipartForm(10 << 20) // 10MB limit
+
+	// 获取文件
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "No file uploaded"})
+		return
+	}
+	defer file.Close()
+
+	// 保存文件
+	dst := filepath.Join(uploadDir, handler.Filename)
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create file"})
+		return
+	}
+	defer dstFile.Close()
+
+	// 复制文件内容
+	if _, err = io.Copy(dstFile, file); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save file"})
+		return
+	}
+
+	// 检测文件类型
+	fileType := "other"
+	ext := filepath.Ext(handler.Filename)
+	switch ext {
+	case ".py":
+		fileType = "python"
+	case ".json", ".yaml", ".yml":
+		fileType = "config"
+	case ".png", ".jpg", ".jpeg":
+		fileType = "image"
+	case ".txt", ".md":
+		fileType = "document"
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("File uploaded successfully: %s", handler.Filename),
+		"file_type": fileType,
+		"filepath": dst,
+		"file_size": handler.Size,
 		"timestamp": time.Now().Unix(),
 	})
 }

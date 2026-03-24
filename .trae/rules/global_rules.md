@@ -63,6 +63,22 @@
 - **团队命名**：遵循EL-CSCC-TEAM-[项目代码]-[序号]的命名格式
 - **职责明确**：碳基成员负责思维锚点、架构设计、价值定调；硅基成员负责代码编织、算法实现、逻辑闭环
 
+### 模拟实现与报告规则
+- **模拟实现条件**：当技术条件暂不具备或外部依赖未就绪时，可采用模拟实现方式
+- **报告要求**：在完成编码调试之前，必须生成一份详细的模拟实现报告
+- **报告内容**：包括模拟实现的原因、范围、具体实现方式、真实实现路径、所需条件、时间预估等
+- **报告存放**：报告以MD格式存放到对应项目的docs文件夹下
+- **报告命名**：遵循YYYYMMDD_[项目名称]_Simulation_Report.md格式
+- **更新机制**：当技术条件成熟时，应及时更新报告并开始真实实现
+
+### 版本管理规则
+- **ELR 1.0 版本保护**：ELR 1.0 版本（位于 `E:\X54\github\Meta-CreationPower\05_Open_source_ProjectRepository\ELR 0.1`）作为 ELR 容器的原始版本，是后续迭代版本的重要参考基准
+- **禁止修改原则**：ELR 1.0 版本的代码和结构不得被修改，仅作为参考和学习使用
+- **开发迭代项目位置**：ELR（Enlightenment Lighthouse Runtime）容器的开发迭代项目位置为 `E:\X54\github\Meta-CreationPower\05_Open_source_ProjectRepository\AIAgentFramework\EnlightenmentLighthouseRuntime`，所有开发和迭代工作应在此位置进行
+- **参考版本**：其他版本包括 ELR 1.0 和 ELR 临时参考（位于 `E:\X54\github\Meta-CreationPower\05_Open_source_ProjectRepository\ELR 临时参考`）仅作为参考使用，不得修改其代码
+- **迭代参考**：后续版本的 ELR 容器开发应参考 ELR 1.0 版本的设计理念和架构，在此基础上进行创新和优化
+- **重大改动参考**：对于 ELR 容器原有项目文件的比较大改动或重大改动，必须参考 `20260324_ELR_Container_Version_Management_Archive.md` 文件（位于 `E:\X54\github\Meta-CreationPower\01_EnlightenmentLighthouseOriginTeam\07_ExclusiveFolder_CodeWeaver\DevelopmentNotes`），确保改动符合项目的版本管理策略和架构设计
+
 ### 档案管理规则
 - **档案分类**：思维锚点档案、技术方案档案、工程代码档案、项目管理档案、行业应用档案
 - **档案编码**：遵循ARC-EL-[类型]-[日期]-[负责人]-[序号]-DGM的编码规则

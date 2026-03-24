@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file>icons/elr_icon.png</file>
+    <file>icons/elr_icon_running.png</file>
+    <file>icons/elr_icon_stopped.png</file>
+</qresource>
+</RCC>

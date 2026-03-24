@@ -1,0 +1,90 @@
+x54sir1981&#
+cd E:\X54\github\Meta-CreationPower\05_Open_source_ProjectRepository\AIAgentFramework\EnlightenmentLighthouseRuntime
+powershell -ExecutionPolicy RemoteSigned -File elr.ps1 status
+powershell -ExecutionPolicy RemoteSigned -File elr.ps1 list
+powershell -ExecutionPolicy RemoteSigned -File elr.ps1 inspect --id container-id
+.\elr.ps1 chat
+- ,help - 显示可用命令
+- ,status - 检查ELR容器状态
+- ,models - 列出已加载的模型
+- ,info - 显示ELR容器信息
+- ,clear - 清除对话历史
+- ,exit - 退出对话
+.\elr.ps1 stats
+
+.\elr.ps1 tray
+
+ELR 令牌：48f2706b617b43edb9a2394c710b115615cecc66
+
+. 查看网络状态
+
+检查所有网络服务的运行状态。
+
+```powershell
+.\elr.ps1 network-status
+
+1. 启动所有网络服务
+
+一键启动所有网络服务。
+
+```powershell
+.\elr.ps1 start-all
+
+2. 停止所有网络服务
+
+一键停止所有网络服务。
+
+```powershell
+.\elr.ps1 stop-all
+
+### 3. Desktop API 管理
+
+**启动 Desktop API：**
+
+```powershell
+.\elr.ps1 start-desktop
+```
+
+**停止 Desktop API：**
+
+```powershell
+.\elr.ps1 stop-desktop
+
+## 4. Public API 管理
+
+**启动 Public API：**
+
+```powershell
+.\elr.ps1 start-public
+```
+
+**停止 Public API：**
+
+```powershell
+.\elr.ps1 stop-public
+
+### 5. Model Service 管理
+
+**启动 Model Service：**
+
+```powershell
+.\elr.ps1 start-model
+```
+
+**停止 Model Service：**
+
+```powershell
+.\elr.ps1 stop-model
+```
+### 6. Micro Model Server 管理
+
+**启动 Micro Model Server：**
+
+```powershell
+.\elr.ps1 start-micro
+```
+
+**停止 Micro Model Server：**
+
+```powershell
+.\elr.ps1 stop-micro

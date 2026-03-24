@@ -1,0 +1,11 @@
+{
+  "id": "elr-1774210939215052100",
+  "name": "test-container",
+  "image": "elr-chat",
+  "command": "",
+  "args": null,
+  "env": null,
+  "dir": "~\\.elr\\data\\containers\\elr-1774210939215052100",
+  "status": "created",
+  "created": "2026-03-23T04:22:19.2341865+08:00"
+}

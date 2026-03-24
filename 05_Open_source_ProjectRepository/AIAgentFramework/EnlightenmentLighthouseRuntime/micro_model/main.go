@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"syscall"
 
-	"micro-model/api"
-	"micro-model/config"
-	"micro-model/container"
-	"micro-model/model"
-	"micro-model/monitor"
-	"micro-model/sandbox"
+	"micro_model/api"
+	"micro_model/config"
+	"micro_model/container"
+	"micro_model/model"
+	"micro_model/monitor"
+	"micro_model/sandbox"
 )
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 		log.Fatalf("Failed to initialize container manager: %v", err)
 	}
 
-	sandboxRuntime, err := sandbox.NewSandboxRuntime(&cfg.Sandbox)
+	sandboxRuntime, err := sandbox.NewSandboxRuntime(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize sandbox runtime: %v", err)
 	}

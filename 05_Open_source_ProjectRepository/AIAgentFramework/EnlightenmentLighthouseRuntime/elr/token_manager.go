@@ -56,9 +56,16 @@ func (tm *TokenManager) LoadTokens() error {
 		return nil
 	}
 
-	data, err := os.ReadFile(tm.tokenFile)
+	// Read encrypted data
+	encryptedData, err := os.ReadFile(tm.tokenFile)
 	if err != nil {
 		return fmt.Errorf("failed to read token file: %w", err)
+	}
+
+	// Decrypt data
+	decryptedData, err := Decrypt(encryptedData)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt token data: %w", err)
 	}
 
 	var tokenData struct {
@@ -66,7 +73,7 @@ func (tm *TokenManager) LoadTokens() error {
 		LastUpdated  int64   `json:"last_updated"`
 	}
 
-	if err := json.Unmarshal(data, &tokenData); err != nil {
+	if err := json.Unmarshal(decryptedData, &tokenData); err != nil {
 		return fmt.Errorf("failed to unmarshal token data: %w", err)
 	}
 
@@ -89,12 +96,18 @@ func (tm *TokenManager) SaveTokens() error {
 		return fmt.Errorf("failed to marshal token data: %w", err)
 	}
 
+	// Encrypt data
+	encryptedData, err := Encrypt(data)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt token data: %w", err)
+	}
+
 	// Create directory if not exists
 	if err := os.MkdirAll(filepath.Dir(tm.tokenFile), 0755); err != nil {
 		return fmt.Errorf("failed to create token directory: %w", err)
 	}
 
-	if err := os.WriteFile(tm.tokenFile, data, 0644); err != nil {
+	if err := os.WriteFile(tm.tokenFile, encryptedData, 0644); err != nil {
 		return fmt.Errorf("failed to write token file: %w", err)
 	}
 

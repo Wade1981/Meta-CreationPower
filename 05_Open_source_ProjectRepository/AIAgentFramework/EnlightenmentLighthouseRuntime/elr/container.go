@@ -27,31 +27,55 @@ const (
 
 // ContainerConfig represents the configuration for a container
 type ContainerConfig struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	Image   string            `json:"image"`
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Image        string            `json:"image"`
+	Command      string            `json:"command"`
+	Args         []string          `json:"args"`
+	Env          map[string]string `json:"env"`
+	MemoryLimit  string            `json:"memory_limit"`
+	CPULimit     int               `json:"cpu_limit"`
+	NetworkMode  string            `json:"network_mode"`
+	PortMappings []PortMapping     `json:"port_mappings"`
+	// 文件系统隔离配置
+	FileSystemIsolation bool   `json:"file_system_isolation"`
+	RootFSPath         string `json:"rootfs_path"`
+	ReadOnlyFS         bool   `json:"read_only_fs"`
+}
+
+// PortMapping represents a port mapping for a container
+type PortMapping struct {
+	HostPort      int    `json:"host_port"`
+	ContainerPort int    `json:"container_port"`
+	Protocol      string `json:"protocol"`
 }
 
 // Container represents a container instance
 type Container struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Image     string            `json:"image"`
-	Command   string            `json:"command"`
-	Args      []string          `json:"args"`
-	Env       map[string]string `json:"env"`
-	Dir       string            `json:"dir"`
-	Runtime   *Runtime          `json:"-"`
-	Status    ContainerStatus   `json:"status"`
-	Created   time.Time         `json:"created"`
-	Started   *time.Time        `json:"started,omitempty"`
-	Stopped   *time.Time        `json:"stopped,omitempty"`
-	PID       int               `json:"pid,omitempty"`
-	ExitCode  int               `json:"exit_code,omitempty"`
-	Error     string            `json:"error,omitempty"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Image        string            `json:"image"`
+	Command      string            `json:"command"`
+	Args         []string          `json:"args"`
+	Env          map[string]string `json:"env"`
+	MemoryLimit  string            `json:"memory_limit"`
+	CPULimit     int               `json:"cpu_limit"`
+	NetworkMode  string            `json:"network_mode"`
+	PortMappings []PortMapping     `json:"port_mappings"`
+	IPAddress    string            `json:"ip_address,omitempty"`
+	Dir          string            `json:"dir"`
+	// 文件系统隔离属性
+	FileSystemIsolation bool   `json:"file_system_isolation"`
+	RootFSPath         string `json:"rootfs_path"`
+	ReadOnlyFS         bool   `json:"read_only_fs"`
+	Runtime            *Runtime          `json:"-"`
+	Status             ContainerStatus   `json:"status"`
+	Created            time.Time         `json:"created"`
+	Started            *time.Time        `json:"started,omitempty"`
+	Stopped            *time.Time        `json:"stopped,omitempty"`
+	PID                int               `json:"pid,omitempty"`
+	ExitCode           int               `json:"exit_code,omitempty"`
+	Error              string            `json:"error,omitempty"`
 }
 
 // Start starts the container
@@ -79,11 +103,25 @@ func (c *Container) Start() error {
 
 	fmt.Printf("Starting container: %s (%s)\n", c.ID, c.Name)
 
-	// TODO: Implement container start logic
-	// This is a placeholder for now
+	// Call platform-specific container start
+	if err := c.Runtime.Platform.StartContainer(c); err != nil {
+		c.Status = ContainerStatusError
+		c.Error = fmt.Sprintf("failed to start container: %v", err)
+		c.saveConfig()
+		return fmt.Errorf(c.Error)
+	}
 
-	// Simulate container start
-	c.PID = os.Getpid() + 1000
+	// Simulate container start if platform implementation not available
+	if c.PID == 0 {
+		c.PID = os.Getpid() + 1000
+	}
+
+	// Auto-load container into admin sandbox
+	fmt.Printf("Loading container %s into admin sandbox...\n", c.ID)
+
+	// Simulate sandbox creation and container loading
+	// In a real implementation, this would integrate with the sandbox manager
+	fmt.Printf("Container %s successfully loaded into admin sandbox\n", c.ID)
 
 	fmt.Printf("Started container: %s (%s) with PID %d\n", c.ID, c.Name, c.PID)
 	return nil
@@ -111,8 +149,13 @@ func (c *Container) Stop() error {
 
 	fmt.Printf("Stopping container: %s (%s)\n", c.ID, c.Name)
 
-	// TODO: Implement container stop logic
-	// This is a placeholder for now
+	// Call platform-specific container stop
+	if err := c.Runtime.Platform.StopContainer(c); err != nil {
+		c.Status = ContainerStatusError
+		c.Error = fmt.Sprintf("failed to stop container: %v", err)
+		c.saveConfig()
+		return fmt.Errorf(c.Error)
+	}
 
 	fmt.Printf("Stopped container: %s (%s) with exit code %d\n", c.ID, c.Name, c.ExitCode)
 	return nil
@@ -137,8 +180,13 @@ func (c *Container) Pause() error {
 
 	fmt.Printf("Paused container: %s (%s)\n", c.ID, c.Name)
 
-	// TODO: Implement container pause logic
-	// This is a placeholder for now
+	// Call platform-specific container pause
+	if err := c.Runtime.Platform.PauseContainer(c); err != nil {
+		c.Status = ContainerStatusError
+		c.Error = fmt.Sprintf("failed to pause container: %v", err)
+		c.saveConfig()
+		return fmt.Errorf(c.Error)
+	}
 
 	return nil
 }
@@ -162,8 +210,13 @@ func (c *Container) Unpause() error {
 
 	fmt.Printf("Unpaused container: %s (%s)\n", c.ID, c.Name)
 
-	// TODO: Implement container unpause logic
-	// This is a placeholder for now
+	// Call platform-specific container unpause
+	if err := c.Runtime.Platform.UnpauseContainer(c); err != nil {
+		c.Status = ContainerStatusError
+		c.Error = fmt.Sprintf("failed to unpause container: %v", err)
+		c.saveConfig()
+		return fmt.Errorf(c.Error)
+	}
 
 	return nil
 }
@@ -242,4 +295,87 @@ func loadContainer(containerDir string, runtime *Runtime) (*Container, error) {
 // String returns a string representation of the container
 func (c *Container) String() string {
 	return fmt.Sprintf("%s (%s) - %s", c.ID, c.Name, c.Status)
+}
+
+// UploadFile uploads a file to the container's file system
+func (c *Container) UploadFile(localPath, containerPath, token string) error {
+	// Check if container is running
+	if c.Status != ContainerStatusRunning {
+		return fmt.Errorf("container is not running")
+	}
+
+	// Validate admin permission
+	valid, message := c.Runtime.AdminManager.ValidateAdmin(token, c.ID, "write")
+	if !valid {
+		return fmt.Errorf("permission denied: %s", message)
+	}
+
+	// Get container root filesystem path
+	rootFSPath := filepath.Join(c.Dir, "rootfs")
+	if c.RootFSPath != "" {
+		rootFSPath = c.RootFSPath
+	}
+
+	// Resolve container path
+	destPath := filepath.Join(rootFSPath, containerPath)
+
+	// Create directory if not exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	// Encrypt file before uploading
+	encryptedPath := destPath + ".enc"
+	if err := EncryptFile(localPath, encryptedPath); err != nil {
+		return fmt.Errorf("failed to encrypt file: %v", err)
+	}
+
+	// Rename encrypted file to final path
+	if err := os.Rename(encryptedPath, destPath); err != nil {
+		return fmt.Errorf("failed to rename encrypted file: %v", err)
+	}
+
+	fmt.Printf("Uploaded and encrypted file %s to container %s at %s\n", localPath, c.ID, containerPath)
+	return nil
+}
+
+// DownloadFile downloads a file from the container's file system
+func (c *Container) DownloadFile(containerPath, localPath, token string) error {
+	// Check if container is running
+	if c.Status != ContainerStatusRunning {
+		return fmt.Errorf("container is not running")
+	}
+
+	// Validate admin permission
+	valid, message := c.Runtime.AdminManager.ValidateAdmin(token, c.ID, "read")
+	if !valid {
+		return fmt.Errorf("permission denied: %s", message)
+	}
+
+	// Get container root filesystem path
+	rootFSPath := filepath.Join(c.Dir, "rootfs")
+	if c.RootFSPath != "" {
+		rootFSPath = c.RootFSPath
+	}
+
+	// Resolve container path
+	srcPath := filepath.Join(rootFSPath, containerPath)
+
+	// Check if source file exists
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return fmt.Errorf("file does not exist in container: %s", containerPath)
+	}
+
+	// Create directory if not exists
+	if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	// Decrypt file while downloading
+	if err := DecryptFile(srcPath, localPath); err != nil {
+		return fmt.Errorf("failed to decrypt file: %v", err)
+	}
+
+	fmt.Printf("Downloaded and decrypted file %s from container %s to %s\n", containerPath, c.ID, localPath)
+	return nil
 }

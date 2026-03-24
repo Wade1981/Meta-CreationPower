@@ -1,4 +1,4 @@
-module micro-model
+module micro_model
 
 go 1.21
 

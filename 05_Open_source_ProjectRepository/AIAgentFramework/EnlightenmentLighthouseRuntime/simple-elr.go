@@ -12,7 +12,7 @@ import (
 )
 
 // Version information
-const Version = "1.0.0"
+const Version = "1.1"
 
 // Container statuses
 const (
