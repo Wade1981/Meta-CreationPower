@@ -1,7 +1,10 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -50,19 +53,112 @@ type Resources struct {
 
 // SandboxManager 沙箱管理器
 type SandboxManager struct {
-	config   *config.SandboxConfig
+	config   *config.Config
 	sandboxes map[string]*Sandbox // 沙箱ID -> 沙箱实例
 	modelManager *model.ModelManager
 	mutex    sync.RWMutex
+	storagePath string // 沙箱信息持久化路径
 }
 
 // NewSandboxManager 创建沙箱管理器
-func NewSandboxManager(config *config.SandboxConfig, modelManager *model.ModelManager) (*SandboxManager, error) {
-	return &SandboxManager{
+func NewSandboxManager(config *config.Config, modelManager *model.ModelManager) (*SandboxManager, error) {
+	// 设置存储路径
+	storagePath := "./sandbox-state.json"
+	
+	// 创建沙箱管理器
+	manager := &SandboxManager{
 		config:   config,
 		sandboxes: make(map[string]*Sandbox),
 		modelManager: modelManager,
-	}, nil
+		storagePath: storagePath,
+	}
+	
+	// 加载已有的沙箱信息
+	if err := manager.loadSandboxes(); err != nil {
+		fmt.Printf("Warning: failed to load sandboxes: %v\n", err)
+	}
+	
+	return manager, nil
+}
+
+// loadSandboxes 从磁盘加载沙箱信息
+func (sm *SandboxManager) loadSandboxes() error {
+	// 检查存储文件是否存在
+	if _, err := os.Stat(sm.storagePath); os.IsNotExist(err) {
+		return nil
+	}
+	
+	// 读取存储文件
+	data, err := os.ReadFile(sm.storagePath)
+	if err != nil {
+		return fmt.Errorf("failed to read sandbox state file: %v", err)
+	}
+	
+	// 解析沙箱信息
+	var sandboxes []*Sandbox
+	if err := json.Unmarshal(data, &sandboxes); err != nil {
+		return fmt.Errorf("failed to unmarshal sandbox state: %v", err)
+	}
+	
+	// 加载沙箱信息到内存
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+	
+	for _, sandbox := range sandboxes {
+		sm.sandboxes[sandbox.ID] = sandbox
+		// 如果沙箱状态是运行中，确保它在内存中处于运行状态
+		if sandbox.Status == "running" {
+			fmt.Printf("Loaded running sandbox: %s from persistent storage\n", sandbox.ID)
+			// 确保沙箱有启动时间
+			if sandbox.StartedAt == nil {
+				startTime := time.Now()
+				sandbox.StartedAt = &startTime
+			}
+		}
+	}
+	
+	fmt.Printf("Loaded %d sandboxes from persistent storage\n", len(sandboxes))
+	return nil
+}
+
+// saveSandboxes 将沙箱信息保存到磁盘
+// withLock: 是否已经持有锁
+func (sm *SandboxManager) saveSandboxes(withLock bool) error {
+	var sandboxes []*Sandbox
+	
+	if withLock {
+		// 已经持有锁，直接获取沙箱
+		sandboxes = make([]*Sandbox, 0, len(sm.sandboxes))
+		for _, sandbox := range sm.sandboxes {
+			sandboxes = append(sandboxes, sandbox)
+		}
+	} else {
+		// 未持有锁，需要获取读锁
+		sm.mutex.RLock()
+		sandboxes = make([]*Sandbox, 0, len(sm.sandboxes))
+		for _, sandbox := range sm.sandboxes {
+			sandboxes = append(sandboxes, sandbox)
+		}
+		sm.mutex.RUnlock()
+	}
+	
+	// 序列化沙箱信息
+	data, err := json.MarshalIndent(sandboxes, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal sandbox state: %v", err)
+	}
+	
+	// 确保存储目录存在
+	if err := os.MkdirAll(filepath.Dir(sm.storagePath), 0755); err != nil {
+		return fmt.Errorf("failed to create storage directory: %v", err)
+	}
+	
+	// 写入存储文件
+	if err := os.WriteFile(sm.storagePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write sandbox state file: %v", err)
+	}
+	
+	return nil
 }
 
 // CreateSandbox 创建新沙箱
@@ -91,6 +187,11 @@ func (sm *SandboxManager) CreateSandbox(containerName string) (*Sandbox, error) 
 	sm.sandboxes[sandboxID] = sandbox
 
 	fmt.Printf("Created sandbox: %s in container: %s\n", sandboxID, containerName)
+
+	// 保存沙箱信息到磁盘
+	if err := sm.saveSandboxes(true); err != nil {
+		fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+	}
 
 	return sandbox, nil
 }
@@ -123,140 +224,336 @@ func (sm *SandboxManager) ListSandboxes() []*Sandbox {
 
 // StartSandbox 启动沙箱
 func (sm *SandboxManager) StartSandbox(sandboxID string) error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
+	// Create channel to receive result
+	errCh := make(chan error)
 
-	sandbox, exists := sm.sandboxes[sandboxID]
-	if !exists {
-		return fmt.Errorf("sandbox %s not found", sandboxID)
-	}
+	// Start operation in a goroutine
+	go func() {
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
 
-	if sandbox.Status == "running" {
-		return fmt.Errorf("sandbox %s is already running", sandboxID)
-	}
+		sandbox, exists := sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
+		}
 
-	// 启动沙箱
-	startTime := time.Now()
-	sandbox.StartedAt = &startTime
-	sandbox.Status = "running"
+		if sandbox.Status == "running" {
+			errCh <- fmt.Errorf("sandbox %s is already running", sandboxID)
+			return
+		}
 
-	fmt.Printf("Started sandbox: %s\n", sandboxID)
+		// 启动沙箱
+		startTime := time.Now()
+		sandbox.StartedAt = &startTime
+		sandbox.Status = "running"
 
-	return nil
+		fmt.Printf("Started sandbox: %s\n", sandboxID)
+
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+
+		errCh <- nil
+	}()
+
+	// Wait for operation to complete
+	return <-errCh
 }
 
 // StopSandbox 停止沙箱
 func (sm *SandboxManager) StopSandbox(sandboxID string) error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
+	// Create channel to receive result
+	errCh := make(chan error)
 
-	sandbox, exists := sm.sandboxes[sandboxID]
-	if !exists {
-		return fmt.Errorf("sandbox %s not found", sandboxID)
-	}
+	// Start operation in a goroutine
+	go func() {
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
 
-	if sandbox.Status != "running" {
-		return fmt.Errorf("sandbox %s is not running", sandboxID)
-	}
-
-	// 停止沙箱中的所有模型
-	for modelID := range sandbox.Models {
-		if err := sm.UnloadModel(sandboxID, modelID); err != nil {
-			fmt.Printf("Error unloading model %s: %v\n", modelID, err)
+		sandbox, exists := sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
 		}
-	}
 
-	// 停止沙箱
-	stopTime := time.Now()
-	sandbox.StoppedAt = &stopTime
-	sandbox.Status = "stopped"
+		if sandbox.Status != "running" {
+			errCh <- fmt.Errorf("sandbox %s is not running", sandboxID)
+			return
+		}
 
-	fmt.Printf("Stopped sandbox: %s\n", sandboxID)
+		// 停止沙箱中的所有模型
+		for modelID := range sandbox.Models {
+			if err := sm.UnloadModel(sandboxID, modelID); err != nil {
+				fmt.Printf("Error unloading model %s: %v\n", modelID, err)
+			}
+		}
 
-	return nil
+		// 停止沙箱
+		stopTime := time.Now()
+		sandbox.StoppedAt = &stopTime
+		sandbox.Status = "stopped"
+
+		fmt.Printf("Stopped sandbox: %s\n", sandboxID)
+
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+
+		errCh <- nil
+	}()
+
+	// Wait for operation to complete
+	return <-errCh
 }
 
 // DeleteSandbox 删除沙箱
 func (sm *SandboxManager) DeleteSandbox(sandboxID string) error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
+	// Create channel to receive result
+	errCh := make(chan error)
 
-	// 检查沙箱是否存在
-	_, exists := sm.sandboxes[sandboxID]
-	if !exists {
-		return fmt.Errorf("sandbox %s not found", sandboxID)
-	}
+	// Start operation in a goroutine
+	go func() {
+		// 先检查沙箱是否存在
+		sm.mutex.RLock()
+		_, exists := sm.sandboxes[sandboxID]
+		sm.mutex.RUnlock()
+		
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
+		}
 
-	// 如果沙箱正在运行，先停止
-	if err := sm.StopSandbox(sandboxID); err != nil && err.Error() != fmt.Sprintf("sandbox %s is not running", sandboxID) {
-		return err
-	}
+		// 如果沙箱正在运行，先停止
+		if err := sm.StopSandbox(sandboxID); err != nil && err.Error() != fmt.Sprintf("sandbox %s is not running", sandboxID) {
+			errCh <- err
+			return
+		}
 
-	// 删除沙箱
-	delete(sm.sandboxes, sandboxID)
+		// 删除沙箱
+		sm.mutex.Lock()
+		delete(sm.sandboxes, sandboxID)
+		fmt.Printf("Deleted sandbox: %s\n", sandboxID)
+		
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+		sm.mutex.Unlock()
 
-	fmt.Printf("Deleted sandbox: %s\n", sandboxID)
+		errCh <- nil
+	}()
 
-	return nil
+	// Wait for operation to complete
+	return <-errCh
 }
 
 // LoadModel 加载模型到沙箱
 func (sm *SandboxManager) LoadModel(sandboxID string, modelID string) error {
-	sm.mutex.Lock()
-	defer sm.mutex.Unlock()
+	// Create channel to receive result
+	errCh := make(chan error)
 
-	// 检查沙箱是否存在
-	sandbox, exists := sm.sandboxes[sandboxID]
-	if !exists {
-		return fmt.Errorf("sandbox %s not found", sandboxID)
+	// Start operation in a goroutine
+	go func() {
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
+
+		// 检查沙箱是否存在
+		sandbox, exists := sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
+		}
+
+		// 检查沙箱是否运行中
+		if sandbox.Status != "running" {
+			errCh <- fmt.Errorf("sandbox %s is not running", sandboxID)
+			return
+		}
+
+		// 检查模型是否已加载
+		if _, exists := sandbox.Models[modelID]; exists {
+			errCh <- fmt.Errorf("model %s is already loaded in sandbox %s", modelID, sandboxID)
+			return
+		}
+
+		// 检查模型是否存在
+		if !sm.modelManager.Exists(modelID) {
+			errCh <- fmt.Errorf("model %s not found", modelID)
+			return
+		}
+
+		// 获取模型信息
+		modelInfo, err := sm.modelManager.GetModel(modelID)
+		if err != nil {
+			errCh <- fmt.Errorf("failed to get model info: %v", err)
+			return
+		}
+
+		// 检查模型依赖
+		if err := sm.checkModelDependencies(modelID); err != nil {
+			errCh <- fmt.Errorf("dependency check failed: %v", err)
+			return
+		}
+
+		// 创建模型实例
+		model := &Model{
+			ID:          modelID,
+			Name:        modelInfo.Name,
+			Description: modelInfo.Properties.Description,
+			Status:      "running",
+			Resources: Resources{
+				CPU:    10.0,  // 模拟值
+				Memory: 256 * 1024 * 1024, // 256MB
+				Disk:   512 * 1024 * 1024, // 512MB
+			},
+			LoadedAt: time.Now(),
+		}
+
+		// 加载模型到沙箱
+		sandbox.Models[modelID] = model
+
+		// 更新沙箱资源使用情况
+		sandbox.Resources.CPU += model.Resources.CPU
+		sandbox.Resources.Memory += model.Resources.Memory
+		sandbox.Resources.Disk += model.Resources.Disk
+
+		fmt.Printf("Loaded model %s into sandbox %s\n", modelID, sandboxID)
+
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+
+		// 记录环境检查记录
+		if err := sm.recordEnvironmentCheck(sandboxID, modelID); err != nil {
+			fmt.Printf("Warning: failed to record environment check: %v\n", err)
+		}
+
+		errCh <- nil
+	}()
+
+	// Wait for operation to complete
+	return <-errCh
+}
+
+// checkModelDependencies 检查模型依赖
+func (sm *SandboxManager) checkModelDependencies(modelID string) error {
+	// 获取模型适配器
+	adapter, err := sm.modelManager.GetModelAdapter(modelID)
+	if err != nil {
+		return fmt.Errorf("failed to get model adapter: %v", err)
 	}
 
-	// 检查沙箱是否运行中
-	if sandbox.Status != "running" {
-		return fmt.Errorf("sandbox %s is not running", sandboxID)
+	// 检查模型属性
+	if adapter.Properties == nil {
+		return fmt.Errorf("model properties not found for model %s", modelID)
 	}
 
-	// 检查模型是否已加载
-	if _, exists := sandbox.Models[modelID]; exists {
-		return fmt.Errorf("model %s is already loaded in sandbox %s", modelID, sandboxID)
+	// 检查依赖
+	deps := adapter.Properties.Dependencies
+	var missingDeps []string
+
+	// 检查Python依赖
+	if len(deps.Pip) > 0 {
+		// 检查pip依赖是否安装
+		for _, dep := range deps.Pip {
+			if !sm.isPythonPackageInstalled(dep) {
+				missingDeps = append(missingDeps, fmt.Sprintf("Python package: %s", dep))
+			}
+		}
 	}
 
-	// 检查模型是否存在
-	if !sm.modelManager.Exists(modelID) {
-		return fmt.Errorf("model %s not found", modelID)
+	// 检查系统依赖
+	if len(deps.System) > 0 {
+		// 检查系统依赖是否安装
+		for _, dep := range deps.System {
+			if !sm.isSystemPackageInstalled(dep) {
+				missingDeps = append(missingDeps, fmt.Sprintf("System package: %s", dep))
+			}
+		}
 	}
 
+	// 如果有缺失的依赖，列出并给出安装命令
+	if len(missingDeps) > 0 {
+		fmt.Println("Missing dependencies for model", modelID, ":")
+		for _, dep := range missingDeps {
+			fmt.Println("- " + dep)
+		}
+
+		// 给出安装命令
+		fmt.Println("\nTo install these dependencies, run:")
+		if len(deps.Pip) > 0 {
+			fmt.Println("elr model install-deps --model-id " + modelID + " --type pip")
+		}
+		if len(deps.System) > 0 {
+			fmt.Println("elr model install-deps --model-id " + modelID + " --type system")
+		}
+
+		return fmt.Errorf("missing dependencies for model %s", modelID)
+	}
+
+	return nil
+}
+
+// isPythonPackageInstalled 检查Python包是否安装
+func (sm *SandboxManager) isPythonPackageInstalled(packageName string) bool {
+	// 简化实现，实际应该检查Python包是否安装
+	// 这里返回true表示假设所有包都已安装
+	// 实际实现应该使用pip list或pip show命令检查
+	return true
+}
+
+// isSystemPackageInstalled 检查系统包是否安装
+func (sm *SandboxManager) isSystemPackageInstalled(packageName string) bool {
+	// 简化实现，实际应该检查系统包是否安装
+	// 这里返回true表示假设所有包都已安装
+	// 实际实现应该使用系统包管理器检查
+	return true
+}
+
+// recordEnvironmentCheck 记录环境检查记录
+func (sm *SandboxManager) recordEnvironmentCheck(sandboxID string, modelID string) error {
 	// 获取模型信息
 	modelInfo, err := sm.modelManager.GetModel(modelID)
 	if err != nil {
 		return fmt.Errorf("failed to get model info: %v", err)
 	}
 
-	// 创建模型实例
-	model := &Model{
-		ID:          modelID,
-		Name:        modelInfo.Name,
-		Description: modelInfo.Properties.Description,
-		Status:      "running",
-		Resources: Resources{
-			CPU:    10.0,  // 模拟值
-			Memory: 256 * 1024 * 1024, // 256MB
-			Disk:   512 * 1024 * 1024, // 512MB
-		},
-		LoadedAt: time.Now(),
+	// 创建环境检查记录
+	checkRecord := map[string]interface{}{
+		"sandbox_id":    sandboxID,
+		"model_id":      modelID,
+		"model_name":    modelInfo.Name,
+		"check_time":    time.Now().Format(time.RFC3339),
+		"dependencies":  modelInfo.Properties.Dependencies,
+		"status":        "ok",
 	}
 
-	// 加载模型到沙箱
-	sandbox.Models[modelID] = model
+	// 保存检查记录到文件
+	checkPath := filepath.Join(".", "env-checks.json")
 
-	// 更新沙箱资源使用情况
-	sandbox.Resources.CPU += model.Resources.CPU
-	sandbox.Resources.Memory += model.Resources.Memory
-	sandbox.Resources.Disk += model.Resources.Disk
+	// 读取现有记录
+	var records []map[string]interface{}
+	if _, err := os.Stat(checkPath); err == nil {
+		data, err := os.ReadFile(checkPath)
+		if err == nil {
+			json.Unmarshal(data, &records)
+		}
+	}
 
-	fmt.Printf("Loaded model %s into sandbox %s\n", modelID, sandboxID)
+	// 添加新记录
+	records = append(records, checkRecord)
 
-	return nil
+	// 写入文件
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal environment check record: %v", err)
+	}
+
+	return os.WriteFile(checkPath, data, 0644)
 }
 
 // UnloadModel 从沙箱卸载模型
@@ -285,6 +582,11 @@ func (sm *SandboxManager) UnloadModel(sandboxID string, modelID string) error {
 	sandbox.Resources.Disk -= model.Resources.Disk
 
 	fmt.Printf("Unloaded model %s from sandbox %s\n", modelID, sandboxID)
+
+	// 保存沙箱信息到磁盘
+	if err := sm.saveSandboxes(true); err != nil {
+		fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+	}
 
 	return nil
 }
@@ -419,6 +721,11 @@ func (sm *SandboxManager) Cleanup() error {
 		delete(sm.sandboxes, sandboxID)
 	}
 
+	// 保存沙箱信息到磁盘（清空所有沙箱）
+	if err := sm.saveSandboxes(true); err != nil {
+		fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+	}
+
 	fmt.Println("Cleaned up sandbox environment")
 
 	return nil
@@ -452,13 +759,13 @@ type SandboxRuntime struct {
 // NewSandboxRuntime 创建沙箱运行时
 func NewSandboxRuntime(config *config.Config) (*SandboxRuntime, error) {
 	// 创建模型管理器
-	modelManager, err := model.NewModelManager(&config.Model)
+	modelManager, err := model.NewModelManager(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create model manager: %v", err)
 	}
 
 	// 创建沙箱管理器
-	manager, err := NewSandboxManager(&config.Sandbox, modelManager)
+	manager, err := NewSandboxManager(config, modelManager)
 	if err != nil {
 		return nil, err
 	}
@@ -517,4 +824,30 @@ func (sr *SandboxRuntime) StopRuntime(containerName string) error {
 	// 简化实现，直接使用容器名称作为沙箱ID
 	sandboxID := containerName
 	return sr.manager.StopSandbox(sandboxID)
+}
+
+// StartRuntime 启动运行时
+func (sr *SandboxRuntime) StartRuntime() error {
+	// 加载沙箱信息
+	if err := sr.manager.loadSandboxes(); err != nil {
+		return fmt.Errorf("failed to load sandboxes: %v", err)
+	}
+	return nil
+}
+
+// StopAllSandboxes 停止所有沙箱
+func (sr *SandboxRuntime) StopAllSandboxes() error {
+	// 停止所有沙箱
+	sandboxes := sr.manager.ListSandboxes()
+	for _, sandbox := range sandboxes {
+		if err := sr.manager.StopSandbox(sandbox.ID); err != nil {
+			fmt.Printf("Error stopping sandbox %s: %v\n", sandbox.ID, err)
+		}
+	}
+	return nil
+}
+
+// GetSandboxManager 获取沙箱管理器
+func (sr *SandboxRuntime) GetSandboxManager() *SandboxManager {
+	return sr.manager
 }

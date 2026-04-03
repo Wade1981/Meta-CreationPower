@@ -178,18 +178,21 @@ func (n *NetworkManager) runModel(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// 加载配置并创建沙箱运行时
-	modelConfig := &config.ModelConfig{
-		ModelDir: "./micro_model/model/models",
+	fullConfig := &config.Config{
+		Model: config.ModelConfig{
+			ModelDir: "./micro_model/model/models",
+		},
+		Sandbox: config.SandboxConfig{},
 	}
 	
-	modelManager, err := model.NewModelManager(modelConfig)
+	modelManager, err := model.NewModelManager(fullConfig)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create model manager"})
 		return
 	}
 	
-	sandboxManager, err := sandbox.NewSandboxManager(&config.SandboxConfig{}, modelManager)
+	sandboxManager, err := sandbox.NewSandboxManager(fullConfig, modelManager)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create sandbox manager"})
@@ -274,24 +277,47 @@ func (n *NetworkManager) getNetworkStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// 获取容器网络状态
+	containers := n.runtime.ListContainers()
+	containerNetworkStatus := make([]map[string]interface{}, 0, len(containers))
+	for _, container := range containers {
+		containerNetworkStatus = append(containerNetworkStatus, map[string]interface{}{
+			"id":               container.ID,
+			"name":             container.Name,
+			"network_enabled":  container.NetworkEnabled,
+			"network_mode":     container.NetworkMode,
+			"ip_address":       container.IPAddress,
+			"port_mappings":    container.PortMappings,
+			"status":           string(container.Status),
+		})
+	}
+
 	// 构建网络状态响应
 	networkStatus := map[string]interface{}{
+		"runtime_network_enabled": n.runtime.Config.Network.Enable,
+		"api_ports": map[string]interface{}{
+			"desktop_api": n.runtime.Config.Network.APIPorts.DesktopAPI,
+			"public_api":  n.runtime.Config.Network.APIPorts.PublicAPI,
+			"model_api":   n.runtime.Config.Network.APIPorts.ModelAPI,
+		},
 		"desktop_api": map[string]interface{}{
-			"address": "http://localhost:8081",
-			"port":    8081,
-			"status":  "running",
+			"address": fmt.Sprintf("http://localhost:%d", n.runtime.Config.Network.APIPorts.DesktopAPI),
+			"port":    n.runtime.Config.Network.APIPorts.DesktopAPI,
+			"status":  func() string { if n.runtime.Config.Network.Enable { return "running" } else { return "disabled" } }(),
 		},
 		"public_api": map[string]interface{}{
-			"address": "http://localhost:8080",
-			"port":    8080,
-			"status":  "running",
+			"address": fmt.Sprintf("http://localhost:%d", n.runtime.Config.Network.APIPorts.PublicAPI),
+			"port":    n.runtime.Config.Network.APIPorts.PublicAPI,
+			"status":  func() string { if n.runtime.Config.Network.Enable { return "running" } else { return "disabled" } }(),
 		},
 		"model_api": map[string]interface{}{
-			"address": "http://localhost:8080/api/model",
-			"port":    8080,
-			"status":  "running",
+			"address": fmt.Sprintf("http://localhost:%d/api/model", n.runtime.Config.Network.APIPorts.ModelAPI),
+			"port":    n.runtime.Config.Network.APIPorts.ModelAPI,
+			"status":  func() string { if n.runtime.Config.Network.Enable { return "running" } else { return "disabled" } }(),
 		},
-		"timestamp": time.Now().Unix(),
+		"containers":      containerNetworkStatus,
+		"container_count": len(containers),
+		"timestamp":       time.Now().Unix(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

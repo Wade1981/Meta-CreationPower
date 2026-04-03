@@ -14,6 +14,14 @@ type Config struct {
 	Model      ModelConfig      `mapstructure:"model"`
 	Sandbox    SandboxConfig    `mapstructure:"sandbox"`
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
+	Python     PythonConfig     `mapstructure:"python"`
+}
+
+// PythonConfig Python配置
+type PythonConfig struct {
+	Path        string `mapstructure:"path"`
+	Version     string `mapstructure:"version"`
+	AutoInstall bool   `mapstructure:"auto_install"`
 }
 
 // ServerConfig 服务器配置
@@ -67,6 +75,9 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("monitoring.enabled", true)
 	viper.SetDefault("monitoring.interval", 5)
 	viper.SetDefault("monitoring.prometheus_port", 9090)
+	viper.SetDefault("python.path", "")
+	viper.SetDefault("python.version", "3.8+")
+	viper.SetDefault("python.auto_install", false)
 
 	// 尝试加载配置文件
 	viper.SetConfigName("config")

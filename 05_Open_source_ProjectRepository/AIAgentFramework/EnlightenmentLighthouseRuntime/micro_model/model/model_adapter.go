@@ -105,16 +105,7 @@ func (a *ModelAdapter) RunEntryPoint(entryPoint string) error {
 	return fmt.Errorf("entry point %s not found", entryPoint)
 }
 
-// isLinux 检查是否为Linux系统
-func isLinux() bool {
-	return strings.Contains(strings.ToLower(os.Getenv("OS")), "linux") || 
-		   strings.Contains(strings.ToLower(os.Getenv("OSTYPE")), "linux")
-}
 
-// isWindows 检查是否为Windows系统
-func isWindows() bool {
-	return strings.Contains(strings.ToLower(os.Getenv("OS")), "windows")
-}
 
 // Run 运行模型
 func (a *ModelAdapter) Run(input string) (string, error) {

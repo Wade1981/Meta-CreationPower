@@ -68,14 +68,16 @@ type Container struct {
 	FileSystemIsolation bool   `json:"file_system_isolation"`
 	RootFSPath         string `json:"rootfs_path"`
 	ReadOnlyFS         bool   `json:"read_only_fs"`
-	Runtime            *Runtime          `json:"-"`
-	Status             ContainerStatus   `json:"status"`
-	Created            time.Time         `json:"created"`
-	Started            *time.Time        `json:"started,omitempty"`
-	Stopped            *time.Time        `json:"stopped,omitempty"`
-	PID                int               `json:"pid,omitempty"`
-	ExitCode           int               `json:"exit_code,omitempty"`
-	Error              string            `json:"error,omitempty"`
+	// 网络状态
+	NetworkEnabled bool `json:"network_enabled"`
+	Runtime        *Runtime          `json:"-"`
+	Status         ContainerStatus   `json:"status"`
+	Created        time.Time         `json:"created"`
+	Started        *time.Time        `json:"started,omitempty"`
+	Stopped        *time.Time        `json:"stopped,omitempty"`
+	PID            int               `json:"pid,omitempty"`
+	ExitCode       int               `json:"exit_code,omitempty"`
+	Error          string            `json:"error,omitempty"`
 }
 
 // Start starts the container
@@ -310,33 +312,45 @@ func (c *Container) UploadFile(localPath, containerPath, token string) error {
 		return fmt.Errorf("permission denied: %s", message)
 	}
 
-	// Get container root filesystem path
-	rootFSPath := filepath.Join(c.Dir, "rootfs")
-	if c.RootFSPath != "" {
-		rootFSPath = c.RootFSPath
-	}
+	// Create a channel to receive the result
+	errCh := make(chan error, 1)
 
-	// Resolve container path
-	destPath := filepath.Join(rootFSPath, containerPath)
+	// Run the upload process in a goroutine
+	go func() {
+		// Get container root filesystem path
+		rootFSPath := filepath.Join(c.Dir, "rootfs")
+		if c.RootFSPath != "" {
+			rootFSPath = c.RootFSPath
+		}
 
-	// Create directory if not exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
-	}
+		// Resolve container path
+		destPath := filepath.Join(rootFSPath, containerPath)
 
-	// Encrypt file before uploading
-	encryptedPath := destPath + ".enc"
-	if err := EncryptFile(localPath, encryptedPath); err != nil {
-		return fmt.Errorf("failed to encrypt file: %v", err)
-	}
+		// Create directory if not exists
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			errCh <- fmt.Errorf("failed to create directory: %v", err)
+			return
+		}
 
-	// Rename encrypted file to final path
-	if err := os.Rename(encryptedPath, destPath); err != nil {
-		return fmt.Errorf("failed to rename encrypted file: %v", err)
-	}
+		// Encrypt file before uploading
+		encryptedPath := destPath + ".enc"
+		if err := EncryptFile(localPath, encryptedPath); err != nil {
+			errCh <- fmt.Errorf("failed to encrypt file: %v", err)
+			return
+		}
 
-	fmt.Printf("Uploaded and encrypted file %s to container %s at %s\n", localPath, c.ID, containerPath)
-	return nil
+		// Rename encrypted file to final path
+		if err := os.Rename(encryptedPath, destPath); err != nil {
+			errCh <- fmt.Errorf("failed to rename encrypted file: %v", err)
+			return
+		}
+
+		fmt.Printf("Uploaded and encrypted file %s to container %s at %s\n", localPath, c.ID, containerPath)
+		errCh <- nil
+	}()
+
+	// Wait for the upload to complete
+	return <-errCh
 }
 
 // DownloadFile downloads a file from the container's file system

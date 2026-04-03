@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"gopkg.in/yaml.v2"
 )
 
 // Runtime represents the core runtime of ELR
@@ -55,16 +57,34 @@ type Config struct {
 		Enable  bool   `yaml:"enable"`
 		Bridge  string `yaml:"bridge"`
 		Subnet  string `yaml:"subnet"`
+		// API服务端口配置
+		APIPorts struct {
+			DesktopAPI int `yaml:"desktop_api"`
+			PublicAPI  int `yaml:"public_api"`
+			ModelAPI   int `yaml:"model_api"`
+		} `yaml:"api_ports"`
 	} `yaml:"network"`
 	Storage struct {
 		Enable  bool   `yaml:"enable"`
 		Driver  string `yaml:"driver"`
 		BaseDir string `yaml:"base_dir"`
 	} `yaml:"storage"`
+	FileDirectories map[string]string `yaml:"file_directories"` // File type to directory mapping
 	Languages map[string]struct {
 		Enable  bool   `yaml:"enable"`
 		Runtime string `yaml:"runtime"`
 	} `yaml:"languages"`
+	PythonVersions map[string]string `yaml:"python_versions"` // Python version to installation path mapping
+	Resources struct {
+		Types map[string]struct {
+			Enable bool   `yaml:"enable"`
+			Dir    string `yaml:"dir"`
+		} `yaml:"types"`
+		ModelTypes map[string]struct {
+			Enable bool   `yaml:"enable"`
+			Dir    string `yaml:"dir"`
+		} `yaml:"model_types"`
+	} `yaml:"resources"`
 }
 
 // Platform represents the platform abstraction layer
@@ -554,6 +574,12 @@ func (p *WindowsPlatform) createContainerProcess(c *Container, jobHandle syscall
 
 // setupNetworkIsolation sets up network isolation for a container
 func (p *WindowsPlatform) setupNetworkIsolation(c *Container) error {
+	// Only set up network isolation if container network is enabled
+	if !c.NetworkEnabled {
+		fmt.Printf("Container %s network is disabled, skipping network isolation setup\n", c.ID)
+		return nil
+	}
+
 	fmt.Printf("Setting up network isolation for container %s...\n", c.ID)
 	
 	// For Windows, we'll create a basic network configuration
@@ -1060,6 +1086,23 @@ func NewRuntime(config *Config) (*Runtime, error) {
 		return nil, fmt.Errorf("failed to create plugin directory: %v", err)
 	}
 
+	// Set default network configuration
+	if config.Network.Enable == false {
+		// 默认禁用网络
+		config.Network.Enable = false
+	}
+
+	// Set default API ports to avoid conflicts
+	if config.Network.APIPorts.DesktopAPI == 0 {
+		config.Network.APIPorts.DesktopAPI = 8081
+	}
+	if config.Network.APIPorts.PublicAPI == 0 {
+		config.Network.APIPorts.PublicAPI = 8080
+	}
+	if config.Network.APIPorts.ModelAPI == 0 {
+		config.Network.APIPorts.ModelAPI = 8082
+	}
+
 	// Create platform based on OS
 	var platform Platform
 	switch runtime.GOOS {
@@ -1089,8 +1132,8 @@ func NewRuntime(config *Config) (*Runtime, error) {
 		StopCh:     make(chan struct{}),
 	}
 
-	// Create network manager
-	runtime.NetworkManager = NewNetworkManager(runtime, 8080)
+	// Create network manager with public API port
+	runtime.NetworkManager = NewNetworkManager(runtime, config.Network.APIPorts.PublicAPI)
 
 	// Create token manager
 	tokenFile := filepath.Join(config.DataDir, "tokens.json")
@@ -1120,6 +1163,7 @@ func (r *Runtime) Start() error {
 	fmt.Printf("Platform: %s %s\n", r.Platform.Name(), r.Platform.Version())
 	fmt.Printf("Data directory: %s\n", r.Config.DataDir)
 	fmt.Printf("Plugin directory: %s\n", r.Config.PluginDir)
+	fmt.Printf("Network enabled: %v\n", r.Config.Network.Enable)
 
 	// Start plugins
 	for name, plugin := range r.Plugins {
@@ -1135,9 +1179,15 @@ func (r *Runtime) Start() error {
 		fmt.Printf("Warning: failed to load existing containers: %v\n", err)
 	}
 
-	// Start network service
-	if err := r.NetworkManager.Start(); err != nil {
-		fmt.Printf("Warning: failed to start network service: %v\n", err)
+	// Start network service only if network is enabled
+	if r.Config.Network.Enable {
+		if err := r.NetworkManager.Start(); err != nil {
+			fmt.Printf("Warning: failed to start network service: %v\n", err)
+		} else {
+			fmt.Println("Network service started successfully!")
+		}
+	} else {
+		fmt.Println("Network service is disabled. Use 'elr network enable' to enable it.")
 	}
 
 	fmt.Println("Enlightenment Lighthouse Runtime started successfully!")
@@ -1220,7 +1270,7 @@ func (r *Runtime) CreateContainer(config ContainerConfig) (*Container, error) {
 	// Generate IP address for container
 	ipAddress := fmt.Sprintf("172.16.0.%d", (os.Getpid()%254)+1)
 
-	// Create container
+	// Create container with network disabled by default
 	container := &Container{
 		ID:                 config.ID,
 		Name:               config.Name,
@@ -1237,28 +1287,54 @@ func (r *Runtime) CreateContainer(config ContainerConfig) (*Container, error) {
 		FileSystemIsolation: config.FileSystemIsolation,
 		RootFSPath:         config.RootFSPath,
 		ReadOnlyFS:         config.ReadOnlyFS,
+		NetworkEnabled:     false, // 默认禁用网络
 		Runtime:            r,
 		Status:             ContainerStatusCreated,
 		Created:            time.Now(),
 	}
 
-	// Call platform-specific container creation
-	if err := r.Platform.CreateContainer(container); err != nil {
-		return nil, fmt.Errorf("failed to create container on platform: %v", err)
-	}
+	// Create channel to receive creation result
+	resultCh := make(chan struct {
+		container *Container
+		err       error
+	})
 
-	// Save container config
-	if err := container.saveConfig(); err != nil {
-		return nil, fmt.Errorf("failed to save container config: %v", err)
-	}
+	// Start container creation in a goroutine
+	go func() {
+		// Call platform-specific container creation
+		if err := r.Platform.CreateContainer(container); err != nil {
+			resultCh <- struct {
+				container *Container
+				err       error
+			}{nil, fmt.Errorf("failed to create container on platform: %v", err)}
+			return
+		}
 
-	// Add container to runtime
-	r.ContainerMutex.Lock()
-	r.Containers[config.ID] = container
-	r.ContainerMutex.Unlock()
+		// Save container config
+		if err := container.saveConfig(); err != nil {
+			resultCh <- struct {
+				container *Container
+				err       error
+			}{nil, fmt.Errorf("failed to save container config: %v", err)}
+			return
+		}
 
-	fmt.Printf("Created container: %s (%s)\n", container.ID, container.Name)
-	return container, nil
+		// Add container to runtime
+		r.ContainerMutex.Lock()
+		r.Containers[config.ID] = container
+		r.ContainerMutex.Unlock()
+
+		fmt.Printf("Created container: %s (%s)\n", container.ID, container.Name)
+		fmt.Printf("Container network is disabled by default. Use 'elr container network enable %s' to enable it.\n", container.ID)
+		resultCh <- struct {
+			container *Container
+			err       error
+		}{container, nil}
+	}()
+
+	// Wait for creation to complete
+	result := <-resultCh
+	return result.container, result.err
 }
 
 // GetContainer gets a container by ID
@@ -1406,6 +1482,102 @@ func GetVersion() string {
 // GetConfig returns the runtime configuration
 func (r *Runtime) GetConfig() *Config {
 	return r.Config
+}
+
+// GetFileDirectory returns the directory for a specific file type
+func (r *Runtime) GetFileDirectory(fileType string) (string, error) {
+	// Initialize FileDirectories if it's nil
+	if r.Config.FileDirectories == nil {
+		r.Config.FileDirectories = make(map[string]string)
+	}
+	
+	// Check if directory is already set
+	if dir, exists := r.Config.FileDirectories[fileType]; exists {
+		// Ensure the directory exists
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return "", fmt.Errorf("failed to create directory: %v", err)
+		}
+		return dir, nil
+	}
+	
+	// Create default directory if not set
+	defaultDir := filepath.Join(r.Config.DataDir, "files", fileType)
+	if err := os.MkdirAll(defaultDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create default directory: %v", err)
+	}
+	
+	// Set the default directory
+	r.Config.FileDirectories[fileType] = defaultDir
+	return defaultDir, nil
+}
+
+// SetFileDirectory sets the directory for a specific file type
+func (r *Runtime) SetFileDirectory(fileType string, directory string) error {
+	// Initialize FileDirectories if it's nil
+	if r.Config.FileDirectories == nil {
+		r.Config.FileDirectories = make(map[string]string)
+	}
+	
+	// Ensure the directory exists
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
+	
+	// Set the directory
+	r.Config.FileDirectories[fileType] = directory
+	
+	// Save config to file
+	if err := r.SaveConfig(); err != nil {
+		return fmt.Errorf("failed to save config: %v", err)
+	}
+	
+	return nil
+}
+
+// SaveConfig saves the configuration to file
+func (r *Runtime) SaveConfig() error {
+	configPath := os.Getenv("ELR_CONFIG")
+	if configPath == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		configPath = filepath.Join(homeDir, ".elr", "config.yaml")
+	}
+
+	// Create config directory
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
+	}
+
+	// Serialize config
+	configBytes, err := yaml.Marshal(r.Config)
+	if err != nil {
+		return err
+	}
+
+	// Write config file
+	return os.WriteFile(configPath, configBytes, 0644)
+}
+
+// SaveFile saves a file to the specified file type directory
+func (r *Runtime) SaveFile(fileType string, fileName string, content []byte) error {
+	// Get the directory for this file type
+	dir, err := r.GetFileDirectory(fileType)
+	if err != nil {
+		return err
+	}
+	
+	// Create the full file path
+	filePath := filepath.Join(dir, fileName)
+	
+	// Write the file
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		return fmt.Errorf("failed to write file: %v", err)
+	}
+	
+	return nil
 }
 
 // DefaultDataDir returns the default data directory

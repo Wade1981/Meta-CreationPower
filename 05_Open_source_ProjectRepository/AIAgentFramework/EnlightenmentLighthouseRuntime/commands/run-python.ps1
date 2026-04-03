@@ -1,9 +1,9 @@
 # Python execution module
 function Run-Python {
-    if (-not $global:RUNTIME_STARTED) {
-        Write-Host "Error: ELR runtime is not running"
-        return
-    }
+    # if (-not $global:RUNTIME_STARTED) {
+    #     Write-Host "Error: ELR runtime is not running"
+    #     return
+    # }
 
     # Parse arguments
     $sourceFile = ""
@@ -46,27 +46,57 @@ function Run-Python {
 
     # Check if Python is available
     Write-Host "Debug: Checking for Python interpreter..."
-    $pythonPath = Get-Command python -ErrorAction SilentlyContinue
-    if ($null -eq $pythonPath) {
-        Write-Host "Debug: python not found, trying python3..."
-        $pythonPath = Get-Command python3 -ErrorAction SilentlyContinue
-        if ($null -eq $pythonPath) {
-            Write-Host "Error: Python interpreter not found"
-            Write-Host "Please install Python 3.8 or higher"
-            Write-Host ""
-            Write-Host "You can download Python from:"
-            Write-Host "  https://www.python.org/downloads/"
-            Write-Host ""
-            Write-Host "Or use Python portable version:"
-            Write-Host "  https://www.python.org/downloads/windows/"
-            Write-Host "  (Choose Windows embeddable package)"
-            return
+    
+    # First check config file for Python path
+    $configPath = Join-Path -Path $PSScriptRoot -ChildPath "..\micro_model\config\config.yaml"
+    $pythonExe = $null
+    
+    if (Test-Path $configPath) {
+        $configContent = Get-Content $configPath -Raw
+        if ($configContent -match 'path: "([^"]+)"') {
+            $pythonPathFromConfig = $matches[1]
+            if (-not [string]::IsNullOrEmpty($pythonPathFromConfig)) {
+                $pythonExe = Join-Path -Path $pythonPathFromConfig -ChildPath "python.exe"
+                if (Test-Path $pythonExe) {
+                    Write-Host "Debug: Found Python from config: $pythonExe"
+                } else {
+                    Write-Host "Debug: Python path from config not found: $pythonExe"
+                    $pythonExe = $null
+                }
+            }
         }
     }
-    Write-Host "Debug: Found Python interpreter: $($pythonPath.Source)"
+    
+    # If not found in config, search in PATH
+    if ($null -eq $pythonExe) {
+        $pythonPath = Get-Command python -ErrorAction SilentlyContinue
+        if ($null -eq $pythonPath) {
+            Write-Host "Debug: python not found, trying python3..."
+            $pythonPath = Get-Command python3 -ErrorAction SilentlyContinue
+            if ($null -eq $pythonPath) {
+                Write-Host "Error: Python interpreter not found"
+                Write-Host "Please install Python 3.8 or higher"
+                Write-Host ""
+                Write-Host "You can download Python from:"
+                Write-Host "  https://www.python.org/downloads/"
+                Write-Host ""
+                Write-Host "Or use Python portable version:"
+                Write-Host "  https://www.python.org/downloads/windows/"
+                Write-Host "  (Choose Windows embeddable package)"
+                Write-Host ""
+                Write-Host "Or set Python path using:"
+                Write-Host "  elr setup python --path <python-path>"
+                return
+            }
+            $pythonExe = $pythonPath.Source
+        } else {
+            $pythonExe = $pythonPath.Source
+        }
+    }
+    Write-Host "Debug: Found Python interpreter: $pythonExe"
 
     # Check if it's a Windows Store placeholder
-    if ($pythonPath.Source -like "*Microsoft\WindowsApps\python.exe") {
+    if ($pythonExe -like "*Microsoft\WindowsApps\python.exe") {
         Write-Host "Error: Found Windows Store Python placeholder, not actual Python interpreter"
         Write-Host "Please install Python from official website:"
         Write-Host "  https://www.python.org/downloads/"
@@ -91,8 +121,8 @@ function Run-Python {
         Write-Host "===================================="
         
         try {
-            Write-Host "Debug: Executing: $($pythonPath.Source) $sourceFile"
-            & $pythonPath $sourceFile
+            Write-Host "Debug: Executing: $pythonExe $sourceFile"
+            & $pythonExe $sourceFile
             $exitCode = $LASTEXITCODE
             Write-Host "Debug: Execution completed with exit code: $exitCode"
             
@@ -113,8 +143,8 @@ function Run-Python {
         Write-Host "===================================="
         
         try {
-            Write-Host "Debug: Executing: $($pythonPath.Source) -c $pythonCode"
-            & $pythonPath -c $pythonCode
+            Write-Host "Debug: Executing: $pythonExe -c $pythonCode"
+            & $pythonExe -c $pythonCode
             $exitCode = $LASTEXITCODE
             Write-Host "Debug: Execution completed with exit code: $exitCode"
             

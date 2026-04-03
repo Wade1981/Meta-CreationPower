@@ -26,3 +26,9 @@ monitoring:
   enabled: true
   interval: 5
   prometheus_port: 9090
+
+# Python配置
+python:
+  path: "D:\Python"
+  version: "3.8+"
+  auto_install: false

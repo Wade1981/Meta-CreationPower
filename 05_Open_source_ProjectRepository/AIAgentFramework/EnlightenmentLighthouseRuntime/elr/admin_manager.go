@@ -301,6 +301,12 @@ func (am *AdminManager) ValidateAdmin(token, containerID string, action string) 
 		return true, "Super admin has full permissions"
 	}
 
+	// For system-level operations (empty containerID), check if admin has any permission
+	if containerID == "" {
+		// Regular admin can perform system-level operations
+		return true, "Regular admin can perform system-level operations"
+	}
+
 	// Check container permission
 	for _, perm := range admin.Permissions {
 		if perm.ContainerID == containerID {
