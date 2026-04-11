@@ -74,37 +74,43 @@ if ($args[0] -eq "api" -and $args[1] -eq "start") {
     $containerName = $args[1]
     # Convert positional argument to --name parameter
     & $ElrExe "create" "--name" $containerName "--image" "ubuntu:latest"
+} elseif ($args[0] -eq "sandbox" -and $args[1] -eq "run-model") {
+    # Run model in sandbox
+    Write-Host "Running model in sandbox..."
+    & $ElrExe $args
+} elseif ($args[0] -eq "status") {
+    # Check system status
+    Write-Host "Checking ELR system status..."
+    & $ElrExe $args
+} elseif ($args[0] -eq "interact") {
+    # Interact with model
+    Write-Host "Connecting to model..."
+    & $ElrExe $args
+} elseif ($args[0] -eq "stop-model") {
+    # Stop model
+    Write-Host "Stopping model..."
+    & $ElrExe $args
 } else {
     # Forward all arguments to elr.exe for other commands
     & $ElrExe $args
 }
 
 # Available commands:
-# .\elr.ps1 help           - Show help
-# .\elr.ps1 api start      - Start API services
-# .\elr.ps1 api stop       - Stop API services
-# .\elr.ps1 api status     - Check API status
-# .\elr.ps1 api config     - Configure API settings
-# .\elr.ps1 version        - Print version information
-# .\elr.ps1 start          - Start the ELR runtime
-# .\elr.ps1 stop           - Stop the ELR runtime
-# .\elr.ps1 create         - Create a new container
-# .\elr.ps1 run            - Create and start a new container
-# .\elr.ps1 run python     - Run a Python script
-# .\elr.ps1 install        - Install dependencies
-# .\elr.ps1 install python - Install Python
-# .\elr.ps1 start-container - Start a container
-# .\elr.ps1 stop-container  - Stop a container
-# .\elr.ps1 list           - List all containers
-# .\elr.ps1 delete         - Delete a container
-# .\elr.ps1 inspect        - Inspect a container
-# .\elr.ps1 setup          - Setup ELR system (e.g., isolation)
-# .\elr.ps1 Settings       - Resource configuration commands
+# 
+# 1. File System Management
+# .\elr.ps1 fs upload      - Upload file to container
+# .\elr.ps1 fs download    - Download file from container
+# .\elr.ps1 fs set-dir     - Set directory for file type
+# .\elr.ps1 fs get-dir     - Get directory for file type
+# 
+# 2. Model Management
 # .\elr.ps1 model list     - List all models
 # .\elr.ps1 model get      - Get model information
 # .\elr.ps1 model download - Download a model
 # .\elr.ps1 model delete   - Delete a model
 # .\elr.ps1 model install-deps - Install model dependencies
+# 
+# 3. Sandbox Management
 # .\elr.ps1 sandbox list   - List all sandboxes
 # .\elr.ps1 sandbox create - Create a new sandbox
 # .\elr.ps1 sandbox start  - Start a sandbox
@@ -113,11 +119,63 @@ if ($args[0] -eq "api" -and $args[1] -eq "start") {
 # .\elr.ps1 sandbox load-model - Load model into sandbox
 # .\elr.ps1 sandbox unload-model - Unload model from sandbox
 # .\elr.ps1 sandbox run-model - Run model in sandbox
-# .\elr.ps1 fs upload      - Upload file to container
-# .\elr.ps1 fs download    - Download file from container
-# .\elr.ps1 fs set-dir     - Set directory for file type
-# .\elr.ps1 fs get-dir     - Get directory for file type
+# 
+# 4. Resource Configuration
+# .\elr.ps1 Settings list - List all resource configurations
+# .\elr.ps1 Settings --resource-type <type> --directory <path> - Set resource type directory
+# .\elr.ps1 Settings --model-type <type> --directory <path> - Set model type directory
+# 
+# 5. Upload Commands
+# .\elr.ps1 Upload Settings type <resource-type> path: <file-path> - Upload resource
+# 
+# 6. Installation Commands
+# .\elr.ps1 install python [version] [path] - Install Python
+# 
+# 7. Status Check Commands
+# .\elr.ps1 status          - Check ELR system status
+# .\elr.ps1 status containers - Check container status
+# .\elr.ps1 status sandboxes  - Check sandbox status
+# .\elr.ps1 status models     - Check model status
+# .\elr.ps1 status api        - Check API service status
+# 
+# 8. Model Interaction
+# .\elr.ps1 interact --sandbox-id <sandbox-id> --model-id <model-id> - Interact with a running model
+# 
+# 9. Model Management
+# .\elr.ps1 stop-model --model-id <model-id> [--sandbox-id <sandbox-id>] - Stop a running model
+# 
+# 10. API Service Commands
+# .\elr.ps1 api start      - Start API services
+# .\elr.ps1 api stop       - Stop API services
+# .\elr.ps1 api status     - Check API status
+# .\elr.ps1 api config     - Configure API settings
+# 
+# 11. Container Management
+# .\elr.ps1 create         - Create a new container
+# .\elr.ps1 run            - Create and start a new container
+# .\elr.ps1 start-container - Start a container
+# .\elr.ps1 stop-container  - Stop a container
+# .\elr.ps1 list           - List all containers
+# .\elr.ps1 delete         - Delete a container
+# .\elr.ps1 inspect        - Inspect a container
+# 
+# 12. System Commands
+# .\elr.ps1 help           - Show help
+# .\elr.ps1 version        - Print version information
+# .\elr.ps1 start          - Start the ELR runtime
+# .\elr.ps1 stop           - Stop the ELR runtime
+# .\elr.ps1 setup          - Setup ELR system (e.g., isolation)
 # .\elr.ps1 admin          - Administrator management commands
-# .\elr.ps1 Upload         - Upload commands
 # .\elr.ps1 gui            - Start ELR GUI (Tray Application)
 # .\elr.ps1 tray           - Start ELR GUI (Tray Application)
+#
+# 13. Resource Configuration Commands
+# .\elr.ps1 Settings list     - List all resource configurations
+# .\elr.ps1 Settings --resource-type <type> --directory <path> - Set resource type directory
+# .\elr.ps1 Settings --model-type <type> --directory <path> - Set model type directory
+#
+# 14. Upload Commands
+# .\elr.ps1 Upload Settings type <resource-type> path: <file-path> - Upload resource
+#
+# 15. Installation Commands
+# .\elr.ps1 install python [version] [path] - Install Python

@@ -6,13 +6,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 	"micro_model/config"
 )
 
 // ModelManager 模型管理器
 type ModelManager struct {
-	config *config.Config
+	config       *config.Config
+	loadedModels map[string]*LoadedModel
+	modelMutex   sync.RWMutex
 }
 
 // Model 模型信息
@@ -28,6 +31,16 @@ type Model struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+// LoadedModel 已加载的模型
+type LoadedModel struct {
+	Model        *Model
+	Adapter      *ModelAdapter
+	LoadedAt     time.Time
+	LastUsedAt   time.Time
+	ResourceUsage map[string]interface{}
+	IsActive     bool
+}
+
 // NewModelManager 创建模型管理器
 func NewModelManager(config *config.Config) (*ModelManager, error) {
 	// 确保模型目录存在
@@ -36,7 +49,8 @@ func NewModelManager(config *config.Config) (*ModelManager, error) {
 	}
 
 	return &ModelManager{
-		config: config,
+		config:       config,
+		loadedModels: make(map[string]*LoadedModel),
 	}, nil
 }
 
@@ -181,6 +195,150 @@ func (m *ModelManager) Exists(modelID string) bool {
 	modelPath := filepath.Join(m.config.Model.ModelDir, modelID)
 	_, err := os.Stat(modelPath)
 	return !os.IsNotExist(err)
+}
+
+// LoadModel 加载模型
+func (m *ModelManager) LoadModel(modelID string) error {
+	m.modelMutex.Lock()
+	defer m.modelMutex.Unlock()
+
+	// 检查模型是否已加载
+	if _, exists := m.loadedModels[modelID]; exists {
+		fmt.Printf("Model %s is already loaded\n", modelID)
+		return nil
+	}
+
+	// 获取模型信息
+	model, err := m.GetModel(modelID)
+	if err != nil {
+		return err
+	}
+
+	// 获取模型适配器
+	adapter, err := m.GetModelAdapter(modelID)
+	if err != nil {
+		return err
+	}
+
+	// 创建已加载模型
+	loadedModel := &LoadedModel{
+		Model:        model,
+		Adapter:      adapter,
+		LoadedAt:     time.Now(),
+		LastUsedAt:   time.Now(),
+		ResourceUsage: make(map[string]interface{}),
+		IsActive:     false,
+	}
+
+	// 模拟模型加载过程
+	fmt.Printf("Loading model %s...\n", modelID)
+	time.Sleep(1 * time.Second)
+
+	// 记录资源使用情况
+	loadedModel.ResourceUsage["memory"] = 256 // 假设使用256MB内存
+	loadedModel.ResourceUsage["cpu"] = 10     // 假设使用10% CPU
+
+	// 添加到已加载模型列表
+	m.loadedModels[modelID] = loadedModel
+
+	fmt.Printf("Model %s loaded successfully\n", modelID)
+	return nil
+}
+
+// UnloadModel 卸载模型
+func (m *ModelManager) UnloadModel(modelID string) error {
+	m.modelMutex.Lock()
+	defer m.modelMutex.Unlock()
+
+	// 检查模型是否已加载
+	loadedModel, exists := m.loadedModels[modelID]
+	if !exists {
+		return fmt.Errorf("model %s is not loaded", modelID)
+	}
+
+	// 检查模型是否为活动状态
+	if loadedModel.IsActive {
+		return fmt.Errorf("cannot unload active model %s", modelID)
+	}
+
+	// 模拟模型卸载过程
+	fmt.Printf("Unloading model %s...\n", modelID)
+	time.Sleep(500 * time.Millisecond)
+
+	// 从已加载模型列表中移除
+	delete(m.loadedModels, modelID)
+
+	fmt.Printf("Model %s unloaded successfully\n", modelID)
+	return nil
+}
+
+// SwitchModel 切换模型
+func (m *ModelManager) SwitchModel(modelID string) error {
+	m.modelMutex.Lock()
+	defer m.modelMutex.Unlock()
+
+	// 检查模型是否存在
+	if !m.Exists(modelID) {
+		return fmt.Errorf("model %s not found", modelID)
+	}
+
+	// 检查模型是否已加载，如果没有则加载
+	if _, exists := m.loadedModels[modelID]; !exists {
+		if err := m.LoadModel(modelID); err != nil {
+			return err
+		}
+	}
+
+	// 先将所有模型设置为非活动状态
+	for id, model := range m.loadedModels {
+		model.IsActive = (id == modelID)
+	}
+
+	// 更新活动模型的最后使用时间
+	if loadedModel, exists := m.loadedModels[modelID]; exists {
+		loadedModel.LastUsedAt = time.Now()
+		loadedModel.IsActive = true
+	}
+
+	fmt.Printf("Switched to model %s\n", modelID)
+	return nil
+}
+
+// GetLoadedModels 获取已加载的模型
+func (m *ModelManager) GetLoadedModels() map[string]*LoadedModel {
+	m.modelMutex.RLock()
+	defer m.modelMutex.RUnlock()
+
+	// 创建副本以避免并发修改
+	loadedModels := make(map[string]*LoadedModel)
+	for id, model := range m.loadedModels {
+		loadedModels[id] = model
+	}
+
+	return loadedModels
+}
+
+// IsModelLoaded 检查模型是否已加载
+func (m *ModelManager) IsModelLoaded(modelID string) bool {
+	m.modelMutex.RLock()
+	defer m.modelMutex.RUnlock()
+
+	_, exists := m.loadedModels[modelID]
+	return exists
+}
+
+// GetActiveModel 获取当前活动的模型
+func (m *ModelManager) GetActiveModel() *LoadedModel {
+	m.modelMutex.RLock()
+	defer m.modelMutex.RUnlock()
+
+	for _, model := range m.loadedModels {
+		if model.IsActive {
+			return model
+		}
+	}
+
+	return nil
 }
 
 // GetModelAdapter 获取模型适配器

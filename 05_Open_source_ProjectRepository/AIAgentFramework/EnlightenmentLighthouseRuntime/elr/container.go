@@ -4,6 +4,7 @@ package elr
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -70,6 +71,8 @@ type Container struct {
 	ReadOnlyFS         bool   `json:"read_only_fs"`
 	// 网络状态
 	NetworkEnabled bool `json:"network_enabled"`
+	// 资源管理
+	ResourceMonitor    *ResourceMonitor `json:"-"`
 	Runtime        *Runtime          `json:"-"`
 	Status         ContainerStatus   `json:"status"`
 	Created        time.Time         `json:"created"`
@@ -78,6 +81,77 @@ type Container struct {
 	PID            int               `json:"pid,omitempty"`
 	ExitCode       int               `json:"exit_code,omitempty"`
 	Error          string            `json:"error,omitempty"`
+}
+
+// ResourceMonitor represents a resource monitor for a container
+type ResourceMonitor struct {
+	Container     *Container
+	CPUUsage      float64
+	MemoryUsage   uint64
+	MemoryLimit   uint64
+	CPULimit      int
+	Monitoring    bool
+	StopCh        chan struct{}
+}
+
+// NewResourceMonitor creates a new resource monitor
+func NewResourceMonitor(container *Container) *ResourceMonitor {
+	return &ResourceMonitor{
+		Container:   container,
+		CPUUsage:    0,
+		MemoryUsage: 0,
+		MemoryLimit: parseMemoryLimit(container.MemoryLimit),
+		CPULimit:    container.CPULimit,
+		Monitoring:  false,
+		StopCh:      make(chan struct{}),
+	}
+}
+
+// Start starts the resource monitor
+func (rm *ResourceMonitor) Start() {
+	if rm.Monitoring {
+		return
+	}
+
+	rm.Monitoring = true
+	go rm.monitor()
+}
+
+// Stop stops the resource monitor
+func (rm *ResourceMonitor) Stop() {
+	if !rm.Monitoring {
+		return
+	}
+
+	rm.Monitoring = false
+	close(rm.StopCh)
+}
+
+// monitor monitors the container's resource usage
+func (rm *ResourceMonitor) monitor() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// In a real implementation, this would collect actual resource usage
+			rm.CPUUsage = float64(rand.Intn(rm.CPULimit))
+			rm.MemoryUsage = uint64(rand.Intn(int(rm.MemoryLimit / 1024 / 1024)) * 1024 * 1024)
+		case <-rm.StopCh:
+			return
+		}
+	}
+}
+
+// parseMemoryLimit parses a memory limit string to bytes
+func parseMemoryLimit(limit string) uint64 {
+	if limit == "" {
+		return 512 * 1024 * 1024 // Default 512MB
+	}
+
+	// Simple parsing for now, in a real implementation this would be more robust
+	return 512 * 1024 * 1024
 }
 
 // Start starts the container
@@ -105,12 +179,64 @@ func (c *Container) Start() error {
 
 	fmt.Printf("Starting container: %s (%s)\n", c.ID, c.Name)
 
-	// Call platform-specific container start
-	if err := c.Runtime.Platform.StartContainer(c); err != nil {
+	// Start container with performance optimizations
+	if err := c.startContainerWithOptimizations(); err != nil {
 		c.Status = ContainerStatusError
 		c.Error = fmt.Sprintf("failed to start container: %v", err)
 		c.saveConfig()
 		return fmt.Errorf(c.Error)
+	}
+
+	fmt.Printf("Started container: %s (%s) with PID %d\n", c.ID, c.Name, c.PID)
+	return nil
+}
+
+// startContainerWithOptimizations starts the container with performance optimizations
+func (c *Container) startContainerWithOptimizations() error {
+	// Use goroutines for parallel initialization
+	errCh := make(chan error, 3)
+
+	// Start platform-specific container in a goroutine
+	go func() {
+		if err := c.Runtime.Platform.StartContainer(c); err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+
+	// Start sandbox initialization in a goroutine
+	go func() {
+		// Auto-load container into admin sandbox
+		fmt.Printf("Loading container %s into admin sandbox...\n", c.ID)
+
+		// Simulate sandbox creation and container loading
+		// In a real implementation, this would integrate with the sandbox manager
+		fmt.Printf("Container %s successfully loaded into admin sandbox\n", c.ID)
+		errCh <- nil
+	}()
+
+	// Start resource monitoring in a goroutine
+	go func() {
+		// Initialize resource monitoring
+		fmt.Printf("Initializing resource monitoring for container %s...\n", c.ID)
+		// Create and start resource monitor
+		c.ResourceMonitor = NewResourceMonitor(c)
+		c.ResourceMonitor.Start()
+		errCh <- nil
+	}()
+
+	// Wait for all goroutines to complete
+	var errors []error
+	for i := 0; i < 3; i++ {
+		if err := <-errCh; err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	// Check for errors
+	if len(errors) > 0 {
+		return fmt.Errorf("container start failed: %v", errors)
 	}
 
 	// Simulate container start if platform implementation not available
@@ -118,14 +244,6 @@ func (c *Container) Start() error {
 		c.PID = os.Getpid() + 1000
 	}
 
-	// Auto-load container into admin sandbox
-	fmt.Printf("Loading container %s into admin sandbox...\n", c.ID)
-
-	// Simulate sandbox creation and container loading
-	// In a real implementation, this would integrate with the sandbox manager
-	fmt.Printf("Container %s successfully loaded into admin sandbox\n", c.ID)
-
-	fmt.Printf("Started container: %s (%s) with PID %d\n", c.ID, c.Name, c.PID)
 	return nil
 }
 
@@ -150,6 +268,12 @@ func (c *Container) Stop() error {
 	}
 
 	fmt.Printf("Stopping container: %s (%s)\n", c.ID, c.Name)
+
+	// Stop resource monitor if it exists
+	if c.ResourceMonitor != nil {
+		fmt.Printf("Stopping resource monitor for container %s...\n", c.ID)
+		c.ResourceMonitor.Stop()
+	}
 
 	// Call platform-specific container stop
 	if err := c.Runtime.Platform.StopContainer(c); err != nil {

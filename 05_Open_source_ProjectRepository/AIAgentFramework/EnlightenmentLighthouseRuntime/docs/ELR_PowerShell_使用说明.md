@@ -15,7 +15,90 @@ ELR (Enlightenment Lighthouse Runtime) 是一个轻量级的运行时环境，�
 ### 查看版本信息
 
 ```powershell
-.\elr.ps1 version
+.lr.ps1 version
+```
+
+## 命令帮助信息
+
+### 所有可用命令
+
+```
+Enlightenment Lighthouse Runtime (ELR) 
+ Usage: elr [command] [options] 
+ 
+ Commands: 
+   version           Print version information 
+   help              Print this help message 
+   start             Start the ELR runtime 
+   stop              Stop the ELR runtime 
+   create            Create a new container 
+   run               Create and start a new container 
+   start-container   Start a container 
+   stop-container    Stop a container 
+   list              List all containers 
+   delete            Delete a container 
+   inspect           Inspect a container 
+   setup             Setup ELR system (e.g., isolation) 
+   status            Check ELR system status (containers, sandboxes, models) 
+   status containers Check container status 
+   status sandboxes  Check sandbox status 
+   status models     Check model status 
+   status api        Check API service status 
+   interact          Interact with a running model in sandbox 
+   stop-model        Stop a running model 
+   stop-model --model-id <model-id> [--sandbox-id <sandbox-id>]  Stop model in specific sandbox 
+   model list        List all models 
+   model get         Get model information 
+   model download    Download a model 
+   model delete      Delete a model 
+   model install-deps Install model dependencies 
+   sandbox list      List all sandboxes 
+   sandbox create    Create a new sandbox 
+   sandbox start     Start a sandbox 
+   sandbox stop      Stop a sandbox 
+   sandbox delete    Delete a sandbox 
+   sandbox load-model Load model into sandbox 
+   sandbox unload-model Unload model from sandbox 
+   sandbox run-model Run model in sandbox 
+   install python [version] [path] - Install Python 
+   api start         Start API services (all or specific) 
+   api stop          Stop API services (all or specific) 
+   api status        Check API service status 
+   api config        Configure API addresses and ports 
+   fs upload         Upload file to container 
+   fs download       Download file from container 
+   fs set-dir        Set directory for file type 
+   fs get-dir        Get directory for file type 
+   Settings list     List all resource configurations 
+   Settings --resource-type <type> --directory <path> - Set resource type directory 
+   Settings --model-type <type> --directory <path> - Set model type directory 
+   Upload Settings type <resource-type> path: <file-path> - Upload resource 
+   install python [version] [path] - Install Python 
+
+ Options: 
+   --name            Container name 
+   --image           Container image 
+   --command         Command to run 
+   --arg             Command argument 
+   --env             Environment variable 
+   --id              Container ID 
+   --model-id        Model ID 
+   --sandbox-id      Sandbox ID 
+   --container       Container name 
+   --type            Model type 
+   --url             Download URL 
+   --isolation       Isolation type (windows-container, wsl, basic) 
+   --api-type        API type (desktop, public, model) 
+   --address         API address 
+   --port            API port 
+   --file-type       File type (e.g., model, data, config) 
+   --directory       Directory path 
+   --local-path      Local file path 
+   --container-path  Container file path 
+   --token           Authentication token 
+   --input           Input text for model 
+   --background      Run model in background 
+   --interactive     Start interactive model session
 ```
 
 ## 容器管理

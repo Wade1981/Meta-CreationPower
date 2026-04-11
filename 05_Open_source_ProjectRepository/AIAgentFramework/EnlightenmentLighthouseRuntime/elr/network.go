@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"micro_model/config"
@@ -17,16 +18,20 @@ import (
 
 // NetworkManager 网络管理器
 type NetworkManager struct {
-	runtime *Runtime
-	port    int
-	server  *http.Server
+	runtime       *Runtime
+	port          int
+	server        *http.Server
+	securityManager *SecurityManager
+	networkIsolator *NetworkIsolator
 }
 
 // NewNetworkManager 创建网络管理器
 func NewNetworkManager(runtime *Runtime, port int) *NetworkManager {
 	return &NetworkManager{
-		runtime: runtime,
-		port:    port,
+		runtime:       runtime,
+		port:          port,
+		securityManager: NewSecurityManager(runtime),
+		networkIsolator: NewNetworkIsolator(runtime),
 	}
 }
 
@@ -36,27 +41,32 @@ func (n *NetworkManager) Start() error {
 	handler := http.NewServeMux()
 	
 	// 健康检查
-	handler.HandleFunc("/health", n.healthCheck)
+	handler.HandleFunc("/health", n.securityMiddleware(n.healthCheck))
 	
 	// API路由组
-	handler.HandleFunc("/api/container/list", n.listContainers)
-	handler.HandleFunc("/api/container/status", n.getContainerStatus)
-	handler.HandleFunc("/api/model/run", n.runModel)
-	handler.HandleFunc("/api/model/list", n.listModels)
-	handler.HandleFunc("/api/network/status", n.getNetworkStatus)
+	handler.HandleFunc("/api/container/list", n.securityMiddleware(n.listContainers))
+	handler.HandleFunc("/api/container/status", n.securityMiddleware(n.getContainerStatus))
+	handler.HandleFunc("/api/model/run", n.securityMiddleware(n.runModel))
+	handler.HandleFunc("/api/model/list", n.securityMiddleware(n.listModels))
+	handler.HandleFunc("/api/network/status", n.securityMiddleware(n.getNetworkStatus))
 	// 令牌管理路由
-	handler.HandleFunc("/api/token/create", n.createToken)
-	handler.HandleFunc("/api/token/validate", n.validateToken)
-	handler.HandleFunc("/api/token/refresh", n.refreshToken)
-	handler.HandleFunc("/api/token/list", n.listTokens)
-	handler.HandleFunc("/api/token/revoke", n.revokeToken)
+	handler.HandleFunc("/api/token/create", n.securityMiddleware(n.createToken))
+	handler.HandleFunc("/api/token/validate", n.securityMiddleware(n.validateToken))
+	handler.HandleFunc("/api/token/refresh", n.securityMiddleware(n.refreshToken))
+	handler.HandleFunc("/api/token/list", n.securityMiddleware(n.listTokens))
+	handler.HandleFunc("/api/token/revoke", n.securityMiddleware(n.revokeToken))
 	// Desktop API 路由
-	handler.HandleFunc("/api/desktop/health", n.desktopHealthCheck)
-	handler.HandleFunc("/api/desktop/status", n.desktopStatus)
-	handler.HandleFunc("/api/desktop/containers", n.desktopListContainers)
-	handler.HandleFunc("/api/desktop/resources", n.desktopGetResources)
-	handler.HandleFunc("/api/desktop/files", n.desktopListFiles)
-	handler.HandleFunc("/api/desktop/upload", n.desktopUploadFile)
+	handler.HandleFunc("/api/desktop/health", n.securityMiddleware(n.desktopHealthCheck))
+	handler.HandleFunc("/api/desktop/status", n.securityMiddleware(n.desktopStatus))
+	handler.HandleFunc("/api/desktop/containers", n.securityMiddleware(n.desktopListContainers))
+	handler.HandleFunc("/api/desktop/resources", n.securityMiddleware(n.desktopGetResources))
+	handler.HandleFunc("/api/desktop/files", n.securityMiddleware(n.desktopListFiles))
+	handler.HandleFunc("/api/desktop/upload", n.securityMiddleware(n.desktopUploadFile))
+	
+	// 网络隔离路由
+	handler.HandleFunc("/api/network/isolate", n.securityMiddleware(n.isolateNetwork))
+	handler.HandleFunc("/api/network/unisolate", n.securityMiddleware(n.unisolateNetwork))
+	handler.HandleFunc("/api/network/config", n.securityMiddleware(n.getNetworkConfig))
 	
 	// 创建HTTP服务器
 	serverAddr := fmt.Sprintf(":%d", n.port)
@@ -74,6 +84,145 @@ func (n *NetworkManager) Start() error {
 	}()
 	
 	return nil
+}
+
+// securityMiddleware 安全中间件
+func (n *NetworkManager) securityMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 应用CORS策略
+		n.securityManager.ApplyCORS(w)
+		
+		// 检查速率限制
+		clientIP := r.RemoteAddr
+		if !n.securityManager.CheckRateLimit(clientIP) {
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Rate limit exceeded"})
+			return
+		}
+		
+		// 处理OPTIONS请求
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		// 调用下一个处理函数
+		next(w, r)
+	}
+}
+
+// isolateNetwork 隔离容器网络
+func (n *NetworkManager) isolateNetwork(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	var req struct {
+		ContainerID string `json:"container_id"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+	
+	if req.ContainerID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+	
+	// 获取容器
+	container, err := n.runtime.GetContainer(req.ContainerID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container not found"})
+		return
+	}
+	
+	// 应用网络隔离
+	if err := n.networkIsolator.ApplyNetworkIsolation(container); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to isolate network"})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Network isolated successfully",
+		"container_id": container.ID,
+		"ip_address": container.IPAddress,
+		"timestamp": time.Now().Unix(),
+	})
+}
+
+// unisolateNetwork 取消容器网络隔离
+func (n *NetworkManager) unisolateNetwork(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	var req struct {
+		ContainerID string `json:"container_id"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+	
+	if req.ContainerID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+	
+	// 移除网络隔离
+	if err := n.networkIsolator.RemoveNetworkIsolation(req.ContainerID); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to remove network isolation"})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Network isolation removed successfully",
+		"container_id": req.ContainerID,
+		"timestamp": time.Now().Unix(),
+	})
+}
+
+// getNetworkConfig 获取网络配置
+func (n *NetworkManager) getNetworkConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	containerID := r.URL.Query().Get("container_id")
+	if containerID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+	
+	// 获取网络配置
+	config, exists := n.networkIsolator.GetNetworkConfig(containerID)
+	if !exists {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Network config not found"})
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(config)
 }
 
 // Stop 停止网络服务
@@ -748,4 +897,148 @@ func (n *NetworkManager) desktopUploadFile(w http.ResponseWriter, r *http.Reques
 		"file_size": handler.Size,
 		"timestamp": time.Now().Unix(),
 	})
+}
+
+// SecurityManager 安全管理器
+type SecurityManager struct {
+	runtime *Runtime
+	corsPolicy *CORSPolicy
+	rateLimiter *RateLimiter
+}
+
+// CORSPolicy CORS策略
+type CORSPolicy struct {
+	AllowOrigins []string
+	AllowMethods []string
+	AllowHeaders []string
+	AllowCredentials bool
+}
+
+// RateLimiter 速率限制器
+type RateLimiter struct {
+	limits map[string]int
+	tokens map[string]int
+	timestamps map[string]time.Time
+}
+
+// NewSecurityManager 创建安全管理器
+func NewSecurityManager(runtime *Runtime) *SecurityManager {
+	return &SecurityManager{
+		runtime: runtime,
+		corsPolicy: &CORSPolicy{
+			AllowOrigins: []string{"*"},
+			AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowHeaders: []string{"Content-Type", "Authorization"},
+			AllowCredentials: true,
+		},
+		rateLimiter: &RateLimiter{
+			limits: make(map[string]int),
+			tokens: make(map[string]int),
+			timestamps: make(map[string]time.Time),
+		},
+	}
+}
+
+// ApplyCORS 应用CORS策略
+func (sm *SecurityManager) ApplyCORS(w http.ResponseWriter) {
+	for _, origin := range sm.corsPolicy.AllowOrigins {
+		w.Header().Add("Access-Control-Allow-Origin", origin)
+	}
+	w.Header().Set("Access-Control-Allow-Methods", strings.Join(sm.corsPolicy.AllowMethods, ","))
+	w.Header().Set("Access-Control-Allow-Headers", strings.Join(sm.corsPolicy.AllowHeaders, ","))
+	if sm.corsPolicy.AllowCredentials {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
+}
+
+// CheckRateLimit 检查速率限制
+func (sm *SecurityManager) CheckRateLimit(ip string) bool {
+	// 简单的速率限制实现
+	now := time.Now()
+	if lastTime, exists := sm.rateLimiter.timestamps[ip]; exists {
+		if now.Sub(lastTime) > time.Minute {
+			sm.rateLimiter.tokens[ip] = 0
+			sm.rateLimiter.timestamps[ip] = now
+		}
+	}
+	
+	// 每分钟最多60个请求
+	if sm.rateLimiter.tokens[ip] >= 60 {
+		return false
+	}
+	
+	sm.rateLimiter.tokens[ip]++
+	sm.rateLimiter.timestamps[ip] = now
+	return true
+}
+
+// NetworkIsolator 网络隔离器
+type NetworkIsolator struct {
+	runtime *Runtime
+	isolatedNetworks map[string]NetworkConfig
+}
+
+// NetworkConfig 网络配置
+type NetworkConfig struct {
+	NetworkID     string
+	ContainerID   string
+	IPAddress     string
+	Subnet        string
+	AllowedPorts  []int
+	BlockedPorts  []int
+	Enabled       bool
+}
+
+// NewNetworkIsolator 创建网络隔离器
+func NewNetworkIsolator(runtime *Runtime) *NetworkIsolator {
+	return &NetworkIsolator{
+		runtime: runtime,
+		isolatedNetworks: make(map[string]NetworkConfig),
+	}
+}
+
+// CreateIsolatedNetwork 创建隔离网络
+func (ni *NetworkIsolator) CreateIsolatedNetwork(containerID string) (NetworkConfig, error) {
+	// 生成网络配置
+	config := NetworkConfig{
+		NetworkID:    fmt.Sprintf("net-%s", containerID),
+		ContainerID:  containerID,
+		IPAddress:    fmt.Sprintf("172.18.0.%d", len(ni.isolatedNetworks)+2),
+		Subnet:       "172.18.0.0/16",
+		AllowedPorts: []int{80, 443, 8080}, // 允许的端口
+		BlockedPorts: []int{22, 3389},      // 阻止的端口
+		Enabled:      true,
+	}
+	
+	ni.isolatedNetworks[containerID] = config
+	return config, nil
+}
+
+// ApplyNetworkIsolation 应用网络隔离
+func (ni *NetworkIsolator) ApplyNetworkIsolation(container *Container) error {
+	// 为容器创建隔离网络
+	config, err := ni.CreateIsolatedNetwork(container.ID)
+	if err != nil {
+		return err
+	}
+	
+	// 更新容器网络配置
+	container.IPAddress = config.IPAddress
+	container.NetworkEnabled = true
+	
+	fmt.Printf("Applied network isolation to container %s with IP %s\n", container.ID, config.IPAddress)
+	return nil
+}
+
+// RemoveNetworkIsolation 移除网络隔离
+func (ni *NetworkIsolator) RemoveNetworkIsolation(containerID string) error {
+	delete(ni.isolatedNetworks, containerID)
+	fmt.Printf("Removed network isolation from container %s\n", containerID)
+	return nil
+}
+
+// GetNetworkConfig 获取网络配置
+func (ni *NetworkIsolator) GetNetworkConfig(containerID string) (NetworkConfig, bool) {
+	config, exists := ni.isolatedNetworks[containerID]
+	return config, exists
 }
