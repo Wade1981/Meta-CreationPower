@@ -57,6 +57,7 @@ func (n *NetworkManager) Start() error {
 	handler.HandleFunc("/api/network/status", n.securityMiddleware(n.getNetworkStatus))
 	// 沙箱 API 路由
 	handler.HandleFunc("/api/sandbox/list", n.securityMiddleware(n.listSandboxes))
+	handler.HandleFunc("/api/sandbox/running", n.securityMiddleware(n.listRunningSandboxes))
 	handler.HandleFunc("/api/sandbox/create", n.securityMiddleware(n.createSandbox))
 	handler.HandleFunc("/api/sandbox/start", n.securityMiddleware(n.startSandbox))
 	handler.HandleFunc("/api/sandbox/stop", n.securityMiddleware(n.stopSandbox))
@@ -1192,6 +1193,33 @@ func (n *NetworkManager) listSandboxes(w http.ResponseWriter, r *http.Request) {
 		"success":   true,
 		"sandboxes": sandboxes,
 	})
+}
+
+// listRunningSandboxes 列出运行中的沙箱
+func (n *NetworkManager) listRunningSandboxes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取运行时沙箱列表
+	runtimeSandboxList := GetRuntimeSandboxList()
+	var sandboxes []map[string]interface{}
+
+	if runtimeSandboxList != nil {
+		sandboxList := runtimeSandboxList.ListSandboxes()
+		for _, runningSandbox := range sandboxList {
+			sandbox := map[string]interface{}{
+				"id":           runningSandbox.SandboxID,
+				"container_id": runningSandbox.ContainerID,
+			}
+			sandboxes = append(sandboxes, sandbox)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(sandboxes)
 }
 
 // createSandbox 创建新沙箱

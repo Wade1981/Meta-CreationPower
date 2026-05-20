@@ -2256,26 +2256,33 @@ func findContainerFromSandboxState(sandboxID, dataDir string) (string, error) {
 
 // getSandboxRuntimeStatus 获取沙箱的运行时状态
 // 通过检查容器是否在运行来判断沙箱是否在运行
-func getSandboxRuntimeStatus(sandboxID, containerName string) string {
-	// 检查沙箱是否在沙箱-容器映射中
-	scm := elr.GetSandboxContainerManager()
-	if scm != nil {
-		// 尝试通过容器名称查找容器ID
-		containerID := elr.FindContainerIDByName(containerName)
-		if containerID != "" {
-			// 检查该容器是否在运行
-			// 从 API 获取运行中的容器列表
-			resp, err := http.Get("http://localhost:16888/api/container/running")
-			if err == nil {
-				defer resp.Body.Close()
-				if resp.StatusCode == http.StatusOK {
-					var runningContainers []map[string]interface{}
-					if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err == nil {
-						for _, container := range runningContainers {
-							if id, ok := container["id"].(string); ok && id == containerID {
-								return "has run|running"
+func getSandboxRuntimeStatus(sandboxID, containerID string) string {
+	// 从 API 获取运行中的沙箱列表
+	resp, err := http.Get("http://localhost:16888/api/sandbox/running")
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			var runningSandboxes []map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&runningSandboxes); err == nil {
+				for _, sandbox := range runningSandboxes {
+					if id, ok := sandbox["id"].(string); ok && id == sandboxID {
+						// 沙箱在运行时列表中，现在检查容器是否在运行
+						resp, err := http.Get("http://localhost:16888/api/container/running")
+						if err == nil {
+							defer resp.Body.Close()
+							if resp.StatusCode == http.StatusOK {
+								var runningContainers []map[string]interface{}
+								if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err == nil {
+									for _, container := range runningContainers {
+										if cid, ok := container["id"].(string); ok && cid == containerID {
+											return "has run|running"
+										}
+									}
+								}
 							}
 						}
+						// 沙箱在运行时列表但容器没运行
+						return "has run|Norunning"
 					}
 				}
 			}
