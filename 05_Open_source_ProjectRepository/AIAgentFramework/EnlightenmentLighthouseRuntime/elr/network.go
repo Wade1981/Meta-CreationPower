@@ -1335,12 +1335,23 @@ func (n *NetworkManager) startSandbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 将沙箱添加到运行时沙箱列表
+	runtimeSandboxList := GetRuntimeSandboxList()
+	if err := runtimeSandboxList.AddSandbox(sandboxID, containerID); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error": fmt.Sprintf("Failed to add sandbox to runtime list: %v", err),
+		})
+		return
+	}
+
 	// 返回成功响应
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": "Sandbox start validation passed",
+		"message": "Sandbox started successfully",
 		"sandbox_id": sandboxID,
 		"container_id": containerID,
 	})

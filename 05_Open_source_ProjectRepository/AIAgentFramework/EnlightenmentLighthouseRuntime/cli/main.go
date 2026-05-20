@@ -2406,14 +2406,11 @@ func startSandbox() {
 		if message, ok := result["message"].(string); ok {
 			fmt.Println(message)
 		}
-
-		// 将沙箱添加到运行时列表
-		rsl := elr.GetRuntimeSandboxList()
-		if err := rsl.AddSandbox(sandboxID, containerID); err != nil {
-			fmt.Printf("Warning: failed to add sandbox to runtime list: %v\n", err)
+		if cid, ok := result["container_id"].(string); ok {
+			fmt.Printf("Sandbox started successfully! ID: %s, Container: %s\n", sandboxID, cid)
+		} else {
+			fmt.Printf("Sandbox started successfully! ID: %s\n", sandboxID)
 		}
-
-		fmt.Printf("Sandbox started successfully! ID: %s, Container: %s\n", sandboxID, containerID)
 	} else {
 		if errorMsg, ok := result["error"].(string); ok {
 			fmt.Printf("Error: %s\n", errorMsg)
