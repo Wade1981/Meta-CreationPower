@@ -58,6 +58,8 @@ func (n *NetworkManager) Start() error {
 	// 沙箱 API 路由
 	handler.HandleFunc("/api/sandbox/list", n.securityMiddleware(n.listSandboxes))
 	handler.HandleFunc("/api/sandbox/running", n.securityMiddleware(n.listRunningSandboxes))
+	handler.HandleFunc("/api/sandbox/container/{id}", n.securityMiddleware(n.listSandboxesByContainer))
+	handler.HandleFunc("/api/sandbox/container/{id}/running", n.securityMiddleware(n.listRunningSandboxesByContainer))
 	handler.HandleFunc("/api/sandbox/create", n.securityMiddleware(n.createSandbox))
 	handler.HandleFunc("/api/sandbox/start", n.securityMiddleware(n.startSandbox))
 	handler.HandleFunc("/api/sandbox/stop", n.securityMiddleware(n.stopSandbox))
@@ -1208,6 +1210,114 @@ func (n *NetworkManager) listRunningSandboxes(w http.ResponseWriter, r *http.Req
 
 	if runtimeSandboxList != nil {
 		sandboxList := runtimeSandboxList.ListSandboxes()
+		for _, runningSandbox := range sandboxList {
+			sandbox := map[string]interface{}{
+				"id":           runningSandbox.SandboxID,
+				"container_id": runningSandbox.ContainerID,
+			}
+			sandboxes = append(sandboxes, sandbox)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(sandboxes)
+}
+
+// listSandboxesByContainer 列出指定容器的所有沙箱
+func (n *NetworkManager) listSandboxesByContainer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取容器ID
+	containerID := strings.TrimPrefix(r.URL.Path, "/api/sandbox/container/")
+	if containerID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+
+	// 获取用户主目录
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		homeDir = "."
+	}
+
+	// 构建数据目录
+	dataDir := filepath.Join(homeDir, ".elr", "data")
+
+	// 加载沙箱列表
+	sandboxDir := filepath.Join(dataDir, "sandboxes")
+	var sandboxes []map[string]interface{}
+
+	if entries, err := os.ReadDir(sandboxDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				sandboxID := entry.Name()
+				metaFile := filepath.Join(sandboxDir, sandboxID, "sandbox.json")
+
+				if data, err := os.ReadFile(metaFile); err == nil {
+					var meta map[string]interface{}
+					if err := json.Unmarshal(data, &meta); err == nil {
+						// 检查容器ID是否匹配
+						if metaContainerID, ok := meta["container_id"].(string); ok && metaContainerID == containerID {
+							// 获取沙箱状态
+							status := GetSandboxStatus(sandboxID)
+
+							sandbox := map[string]interface{}{
+								"id":          sandboxID,
+								"name":        sandboxID,
+								"container_id": meta["container_id"],
+								"status":      status,
+								"created_at":  meta["created_at"],
+							}
+							sandboxes = append(sandboxes, sandbox)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"sandboxes": sandboxes,
+	})
+}
+
+// listRunningSandboxesByContainer 列出指定容器中正在运行的沙箱
+func (n *NetworkManager) listRunningSandboxesByContainer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取容器ID
+	path := strings.TrimPrefix(r.URL.Path, "/api/sandbox/container/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 || parts[1] != "running" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid path"})
+		return
+	}
+	containerID := parts[0]
+
+	if containerID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+
+	// 获取运行时沙箱列表中指定容器的沙箱
+	runtimeSandboxList := GetRuntimeSandboxList()
+	var sandboxes []map[string]interface{}
+
+	if runtimeSandboxList != nil {
+		sandboxList := runtimeSandboxList.GetSandboxesByContainer(containerID)
 		for _, runningSandbox := range sandboxList {
 			sandbox := map[string]interface{}{
 				"id":           runningSandbox.SandboxID,

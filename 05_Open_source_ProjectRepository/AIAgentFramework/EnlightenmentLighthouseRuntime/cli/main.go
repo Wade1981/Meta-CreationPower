@@ -2067,7 +2067,8 @@ func sandboxCommand() {
 	}
 }
 
-// listSandboxes 列出所有沙箱
+// listSandboxes 列出沙箱
+// 支持参数: --container <container-id> 按容器ID过滤, --running 只显示运行中的沙箱
 func listSandboxes() {
 	fmt.Println("Listing sandboxes...")
 
@@ -2077,8 +2078,31 @@ func listSandboxes() {
 		os.Exit(1)
 	}
 
+	// 解析参数
+	containerID := ""
+	runningOnly := false
+	
+	for i := 3; i < len(os.Args); i++ {
+		if os.Args[i] == "--container" && i+1 < len(os.Args) {
+			containerID = os.Args[i+1]
+			i++
+		} else if os.Args[i] == "--running" {
+			runningOnly = true
+		}
+	}
+
+	// 构建请求URL
+	url := "http://localhost:16888/api/sandbox/list"
+	if containerID != "" && runningOnly {
+		url = fmt.Sprintf("http://localhost:16888/api/sandbox/container/%s/running", containerID)
+	} else if containerID != "" {
+		url = fmt.Sprintf("http://localhost:16888/api/sandbox/container/%s", containerID)
+	} else if runningOnly {
+		url = "http://localhost:16888/api/sandbox/running"
+	}
+
 	// 发送 HTTP 请求
-	resp, err := http.Get("http://localhost:16888/api/sandbox/list")
+	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Printf("Error calling API: %v\n", err)
 		os.Exit(1)
