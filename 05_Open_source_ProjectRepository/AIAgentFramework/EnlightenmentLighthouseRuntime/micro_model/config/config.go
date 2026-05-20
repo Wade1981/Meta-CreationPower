@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 )
 
 // Config 全局配置结构
@@ -95,6 +97,13 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	// 尝试读取 ELR Settings 配置文件
+	elrModelDir := getELRModelDir()
+	if elrModelDir != "" {
+		fmt.Printf("Using model directory from ELR Settings: %s\n", elrModelDir)
+		viper.Set("model.model_dir", elrModelDir)
+	}
+
 	// 确保模型目录存在
 	modelDir := viper.GetString("model.model_dir")
 	absModelDir, err := filepath.Abs(modelDir)
@@ -110,6 +119,69 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// getELRModelDir 从 ELR Settings 配置文件中获取模型目录
+func getELRModelDir() string {
+	// ELR 配置文件路径
+	configPath := os.Getenv("ELR_CONFIG")
+	if configPath == "" {
+		// 默认路径
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		configPath = filepath.Join(homeDir, ".elr", "config.yaml")
+	}
+
+	// 检查配置文件是否存在
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return ""
+	}
+
+	// 读取配置文件
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+
+	// 解析配置
+	type ELRConfig struct {
+		Resources struct {
+			Types map[string]struct {
+				Enable bool   `yaml:"enable"`
+				Dir    string `yaml:"dir"`
+			} `yaml:"types"`
+			ModelTypes map[string]struct {
+				Enable bool   `yaml:"enable"`
+				Dir    string `yaml:"dir"`
+			} `yaml:"model_types"`
+		} `yaml:"resources"`
+	}
+
+	var elrConfig ELRConfig
+	if err := yaml.Unmarshal(configBytes, &elrConfig); err != nil {
+		return ""
+	}
+
+	// 查找模型类型目录
+	// 优先使用任何启用的模型类型目录
+	for modelType, modelConfig := range elrConfig.Resources.ModelTypes {
+		if modelConfig.Enable && modelConfig.Dir != "" {
+			fmt.Printf("Using model directory from ELR Settings for model type '%s': %s\n", modelType, modelConfig.Dir)
+			return modelConfig.Dir
+		}
+	}
+
+	// 其次使用任何启用的资源类型目录
+	for resourceType, resourceConfig := range elrConfig.Resources.Types {
+		if resourceConfig.Enable && resourceConfig.Dir != "" {
+			fmt.Printf("Using resource directory from ELR Settings for resource type '%s': %s\n", resourceType, resourceConfig.Dir)
+			return resourceConfig.Dir
+		}
+	}
+
+	return ""
 }
 
 // GetConfig 获取配置实例

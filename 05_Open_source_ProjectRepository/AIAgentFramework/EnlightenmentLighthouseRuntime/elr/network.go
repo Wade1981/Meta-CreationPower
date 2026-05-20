@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"runtime"
 
 	"micro_model/config"
 	"micro_model/model"
@@ -46,9 +47,20 @@ func (n *NetworkManager) Start() error {
 	// API路由组
 	handler.HandleFunc("/api/container/list", n.securityMiddleware(n.listContainers))
 	handler.HandleFunc("/api/container/status", n.securityMiddleware(n.getContainerStatus))
+	handler.HandleFunc("/api/container/running", n.securityMiddleware(n.listRunningContainers))
+	handler.HandleFunc("/api/container/start", n.securityMiddleware(n.startContainer))
+	handler.HandleFunc("/api/container/stop", n.securityMiddleware(n.stopContainer))
+	handler.HandleFunc("/api/container/resources", n.securityMiddleware(n.listContainerResources))
+	handler.HandleFunc("/api/runtime/exit", n.securityMiddleware(n.exitRuntime))
 	handler.HandleFunc("/api/model/run", n.securityMiddleware(n.runModel))
 	handler.HandleFunc("/api/model/list", n.securityMiddleware(n.listModels))
 	handler.HandleFunc("/api/network/status", n.securityMiddleware(n.getNetworkStatus))
+	// 沙箱 API 路由
+	handler.HandleFunc("/api/sandbox/list", n.securityMiddleware(n.listSandboxes))
+	handler.HandleFunc("/api/sandbox/create", n.securityMiddleware(n.createSandbox))
+	handler.HandleFunc("/api/sandbox/start", n.securityMiddleware(n.startSandbox))
+	handler.HandleFunc("/api/sandbox/stop", n.securityMiddleware(n.stopSandbox))
+	handler.HandleFunc("/api/sandbox/delete", n.securityMiddleware(n.deleteSandbox))
 	// 令牌管理路由
 	handler.HandleFunc("/api/token/create", n.securityMiddleware(n.createToken))
 	handler.HandleFunc("/api/token/validate", n.securityMiddleware(n.validateToken))
@@ -255,9 +267,50 @@ func (n *NetworkManager) listContainers(w http.ResponseWriter, r *http.Request) 
 	}
 	
 	containers := n.runtime.ListContainers()
+	
+	// Get runtime container list to check which are actually running
+	runtimeContainerList := GetRuntimeContainerList()
+	runningContainers := runtimeContainerList.ListContainers()
+	
+	// Create a map of running container IDs for quick lookup
+	runningContainerMap := make(map[string]bool)
+	for _, rc := range runningContainers {
+		runningContainerMap[rc.ID] = true
+	}
+	
+	// Prepare response with corrected status
+	type ContainerResponse struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Image   string `json:"image"`
+		Status  string `json:"status"`
+		Created string `json:"created"`
+	}
+	
+	var response struct {
+		Containers []ContainerResponse `json:"containers"`
+	}
+	
+	for _, container := range containers {
+		status := string(container.Status)
+		
+		// If container is not in runtime container list but persisted status is running, mark it as not running
+		if !runningContainerMap[container.ID] && container.Status == ContainerStatusRunning {
+			status = "not running (persisted as running)"
+		}
+		
+		response.Containers = append(response.Containers, ContainerResponse{
+			ID:      container.ID,
+			Name:    container.Name,
+			Image:   container.Image,
+			Status:  status,
+			Created: container.Created.Format("2006-01-02 15:04:05"),
+		})
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(containers)
+	json.NewEncoder(w).Encode(response)
 }
 
 // getContainerStatus 获取容器状态
@@ -266,24 +319,209 @@ func (n *NetworkManager) getContainerStatus(w http.ResponseWriter, r *http.Reque
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	containerID := r.URL.Query().Get("id")
 	if containerID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
 		return
 	}
-	
+
 	container, err := n.runtime.GetContainer(containerID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Container not found"})
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(container)
+}
+
+// listRunningContainers 列出运行中的容器
+func (n *NetworkManager) listRunningContainers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get runtime container list
+	runtimeContainerList := GetRuntimeContainerList()
+	containers := runtimeContainerList.ListContainers()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(containers)
+}
+
+// listContainerResources 列出容器资源使用情况
+func (n *NetworkManager) listContainerResources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get runtime container list
+	runtimeContainerList := GetRuntimeContainerList()
+	containers := runtimeContainerList.ListContainers()
+
+	// Prepare resource status response
+	response := map[string]interface{}{
+		"containers": make([]map[string]interface{}, 0),
+	}
+
+	// Get current process memory usage
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	totalMemoryUsage := float64(memStats.Alloc) / (1024 * 1024) // Convert to MB
+
+	// Estimate CPU usage (simplified)
+	totalCPUUsage := 5.0 // Estimated CPU usage
+
+	// Estimate disk usage (simplified)
+	totalDiskUsage := 100.0 // Estimated disk usage in MB
+
+	// Distribute resource usage among containers
+	containerCount := len(containers)
+	if containerCount > 0 {
+		perContainerMemory := totalMemoryUsage / float64(containerCount)
+		perContainerCPU := totalCPUUsage / float64(containerCount)
+		perContainerDisk := totalDiskUsage / float64(containerCount)
+
+		// Add resource information for each container
+		for _, container := range containers {
+			containerInfo := map[string]interface{}{
+				"id":   container.ID,
+				"name": container.Name,
+				"pid":  container.PID,
+				"resources": map[string]interface{}{
+					"cpu":    perContainerCPU,  // Estimated CPU usage
+					"memory": perContainerMemory,  // Estimated memory usage
+					"disk":   perContainerDisk,  // Estimated disk usage
+				},
+			}
+			response["containers"] = append(response["containers"].([]map[string]interface{}), containerInfo)
+		}
+	} else {
+		// No containers running
+		response["containers"] = []map[string]interface{}{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// startContainer 启动容器
+func (n *NetworkManager) startContainer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// 解析请求体
+	var req struct {
+		ID string `json:"id"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+	
+	if req.ID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+	
+	// 获取容器
+	container, err := n.runtime.GetContainer(req.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	
+	// 启动容器
+	if err := container.Start(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	
+	// 返回成功响应
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Container started successfully"})
+}
+
+// stopContainer 停止容器
+func (n *NetworkManager) stopContainer(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// 解析请求体
+	var req struct {
+		ID string `json:"id"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+	
+	if req.ID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
+		return
+	}
+	
+	// 获取容器
+	container, err := n.runtime.GetContainer(req.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	
+	// 停止容器
+	if err := container.Stop(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	
+	// 返回成功响应
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Container stopped successfully"})
+}
+
+// exitRuntime 退出运行时
+func (n *NetworkManager) exitRuntime(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	
+	// 停止运行时
+	go func() {
+		// 给客户端足够的时间来接收响应
+		time.Sleep(1 * time.Second)
+		n.runtime.Stop()
+		os.Exit(0)
+	}()
+	
+	// 返回成功响应
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "ELR runtime exiting..."})
 }
 
 // runModel 运行模型
@@ -896,6 +1134,251 @@ func (n *NetworkManager) desktopUploadFile(w http.ResponseWriter, r *http.Reques
 		"filepath": dst,
 		"file_size": handler.Size,
 		"timestamp": time.Now().Unix(),
+	})
+}
+
+// listSandboxes 列出所有沙箱
+func (n *NetworkManager) listSandboxes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取用户主目录
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		homeDir = "."
+	}
+
+	// 构建数据目录
+	dataDir := filepath.Join(homeDir, ".elr", "data")
+
+	// 初始化沙箱-容器映射管理器
+	InitSandboxContainerManager(dataDir)
+
+	// 加载沙箱列表
+	sandboxDir := filepath.Join(dataDir, "sandboxes")
+	var sandboxes []map[string]interface{}
+
+	if entries, err := os.ReadDir(sandboxDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				sandboxID := entry.Name()
+				metaFile := filepath.Join(sandboxDir, sandboxID, "sandbox.json")
+
+				if data, err := os.ReadFile(metaFile); err == nil {
+					var meta map[string]interface{}
+					if err := json.Unmarshal(data, &meta); err == nil {
+						// 获取沙箱状态
+						status := GetSandboxStatus(sandboxID)
+
+						sandbox := map[string]interface{}{
+							"id":          sandboxID,
+							"name":        sandboxID,
+							"container_id": meta["container_id"],
+							"status":      status,
+							"created_at":  meta["created_at"],
+						}
+						sandboxes = append(sandboxes, sandbox)
+					}
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"sandboxes": sandboxes,
+	})
+}
+
+// createSandbox 创建新沙箱
+func (n *NetworkManager) createSandbox(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析请求体
+	var request map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	containerID, _ := request["container_id"].(string)
+	if containerID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "container_id is required"})
+		return
+	}
+
+	// TODO: 实现创建沙箱的功能
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Create sandbox API not implemented yet",
+		"container_id": containerID,
+	})
+}
+
+// startSandbox 启动沙箱
+func (n *NetworkManager) startSandbox(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析请求体
+	var request map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	sandboxID, _ := request["sandbox_id"].(string)
+	if sandboxID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "sandbox_id is required"})
+		return
+	}
+
+	// 获取用户主目录
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		homeDir = "."
+	}
+
+	// 构建数据目录
+	dataDir := filepath.Join(homeDir, ".elr", "data")
+
+	// 初始化沙箱-容器映射管理器
+	InitSandboxContainerManager(dataDir)
+
+	// 获取沙箱所属的容器ID
+	scm := GetSandboxContainerManager()
+	containerID, err := scm.GetContainerBySandbox(sandboxID)
+	if err != nil {
+		// 兼容旧方案：从 sandbox-state.json 读取容器信息
+		containerID, err = findContainerFromSandboxState(sandboxID, dataDir)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Sandbox not found"})
+			return
+		}
+	}
+
+	// 检查容器是否在运行
+	runtimeContainerList := GetRuntimeContainerList()
+	isContainerRunning := false
+	
+	// 先直接检查容器ID是否在运行
+	for _, rc := range runtimeContainerList.ListContainers() {
+		if rc.ID == containerID {
+			isContainerRunning = true
+			break
+		}
+	}
+	
+	// 如果没找到，尝试通过容器名称查找
+	if !isContainerRunning {
+		if foundContainerID := FindContainerIDByName(containerID); foundContainerID != "" {
+			for _, rc := range runtimeContainerList.ListContainers() {
+				if rc.ID == foundContainerID {
+					isContainerRunning = true
+					break
+				}
+			}
+		}
+	}
+
+	if !isContainerRunning {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error": "Container is not running. Please start the container first before starting the sandbox.",
+			"container_id": containerID,
+		})
+		return
+	}
+
+	// 返回成功响应
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Sandbox start validation passed",
+		"sandbox_id": sandboxID,
+		"container_id": containerID,
+	})
+}
+
+// stopSandbox 停止沙箱
+func (n *NetworkManager) stopSandbox(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析请求体
+	var request map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	sandboxID, _ := request["sandbox_id"].(string)
+	if sandboxID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "sandbox_id is required"})
+		return
+	}
+
+	// TODO: 实现停止沙箱的功能
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Stop sandbox API not implemented yet",
+		"sandbox_id": sandboxID,
+	})
+}
+
+// deleteSandbox 删除沙箱
+func (n *NetworkManager) deleteSandbox(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 解析请求体
+	var request map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
+		return
+	}
+
+	sandboxID, _ := request["sandbox_id"].(string)
+	if sandboxID == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "sandbox_id is required"})
+		return
+	}
+
+	// TODO: 实现删除沙箱的功能
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Delete sandbox API not implemented yet",
+		"sandbox_id": sandboxID,
 	})
 }
 

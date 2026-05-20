@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ import (
 	"micro_model/container"
 	"micro_model/model"
 	"micro_model/monitor"
+	"micro_model/project"
 	"micro_model/sandbox"
 	"gopkg.in/yaml.v2"
 )
@@ -46,6 +48,13 @@ func main() {
 		startRuntime()
 	case "stop":
 		stopRuntime()
+	case "exit":
+		exitRuntime()
+		os.Exit(0)
+	case "console":
+		startInteractiveConsole()
+	case "interactive":
+		startInteractiveConsole()
 	case "create":
 		createContainer()
 	case "run":
@@ -74,6 +83,8 @@ func main() {
 		inspectContainer()
 	case "status":
 		checkStatus()
+	case "running-containers":
+		listRunningContainers()
 	case "interact":
 		interactWithModel()
 	case "stop-model":
@@ -102,6 +113,9 @@ func main() {
 	// 上传命令
 	case "Upload":
 		uploadCommand()
+	// 项目管理命令
+	case "project":
+		projectCommand()
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
 		printHelp()
@@ -602,6 +616,8 @@ func printHelp() {
 	fmt.Println("  help              Print this help message")
 	fmt.Println("  start             Start the ELR runtime")
 	fmt.Println("  stop              Stop the ELR runtime")
+	fmt.Println("  console           Start interactive console mode")
+	fmt.Println("  interactive       Start interactive console mode (alias for console)")
 	fmt.Println("  create            Create a new container")
 	fmt.Println("  run               Create and start a new container")
 	fmt.Println("  start-container   Start a container")
@@ -617,6 +633,7 @@ func printHelp() {
 	fmt.Println("  status sandboxes  Check sandbox status")
 	fmt.Println("  status models     Check model status")
 	fmt.Println("  status api        Check API service status")
+	fmt.Println("  status resources  Check resource usage status")
 	// 模型互动命令
 	fmt.Println("  interact          Interact with a running model in sandbox")
 	// 模型停止命令
@@ -637,6 +654,15 @@ func printHelp() {
 	fmt.Println("  sandbox load-model Load model into sandbox")
 	fmt.Println("  sandbox unload-model Unload model from sandbox")
 	fmt.Println("  sandbox run-model Run model in sandbox")
+	// 项目管理命令
+	fmt.Println("  project list      List all projects")
+	fmt.Println("  project create    Create a new project")
+	fmt.Println("  project delete    Delete a project")
+	fmt.Println("  project deploy    Deploy project to sandbox")
+	fmt.Println("  project undeploy  Undeploy project from sandbox")
+	fmt.Println("  project start     Start project in sandbox")
+	fmt.Println("  project stop      Stop project in sandbox")
+	fmt.Println("  project status    Check project status")
 	// 安装命令
 	fmt.Println("  install python [version] [path] - Install Python")
 	// API 服务命令
@@ -686,6 +712,12 @@ func printHelp() {
 	fmt.Println("  --input           Input text for model")
 	fmt.Println("  --background      Run model in background")
 	fmt.Println("  --interactive     Start interactive model session")
+	// 项目管理选项
+	fmt.Println("  --project-id      Project ID")
+	fmt.Println("  --project-type    Project type (nodejs, php, java)")
+	fmt.Println("  --version         Project version")
+	fmt.Println("  --description     Project description")
+	fmt.Println("  --path            Project path")
 } 
 
 // loadConfig loads the configuration from file
@@ -894,39 +926,109 @@ func defaultConfig() *elr.Config {
 	}
 }
 
+// listRunningContainers lists all running containers
+func listRunningContainers() {
+	fmt.Println("Checking running containers...")
+	
+	// Get runtime container list
+	runtimeContainerList := elr.GetRuntimeContainerList()
+
+	// List running containers
+	containers := runtimeContainerList.ListContainers()
+	if len(containers) > 0 {
+		fmt.Println("\n=== Running Containers ===")
+		fmt.Printf("%-36s %-20s %-10s\n", "ID", "Name", "PID")
+		fmt.Println(strings.Repeat("-", 66))
+		
+		for _, containerInfo := range containers {
+			fmt.Printf("%-36s %-20s %-10d\n", containerInfo.ID, containerInfo.Name, containerInfo.PID)
+		}
+		
+		fmt.Printf("\nTotal running containers: %d\n", len(containers))
+	} else {
+		fmt.Println("No running containers found.")
+	}
+}
+
+// isELRRunning checks if ELR is already running by trying to connect to port 16888
+func isELRRunning() bool {
+	conn, err := net.Dial("tcp", "localhost:16888")
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+	return true
+}
+
 // startRuntime starts the ELR runtime
 func startRuntime() {
-	// Load config
-	config, err := loadConfig()
+	// 检查是否是后台运行模式
+	isBackground := false
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] == "--background" {
+			isBackground = true
+			break
+		}
+	}
+
+	if isBackground {
+		// 后台模式：启动 ELR 运行时
+		startRuntimeBackground()
+	} else {
+		// 前台模式：启动后台进程
+		// Check if ELR is already running
+		if isELRRunning() {
+			fmt.Println("ELR 轻量级容器已启动！命令端口: 8080，您现在可以启动或停止容器。")
+			return
+		}
+
+		// 获取当前可执行文件路径
+		execPath, err := os.Executable()
+		if err != nil {
+			fmt.Printf("Error getting executable path: %v\n", err)
+			return
+		}
+
+		// 构建后台命令参数
+		args := []string{"start", "--background"}
+
+		// 启动后台进程
+		cmd := exec.Command(execPath, args...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: 0x08000000,
+		}
+
+		err = cmd.Start()
+		if err != nil {
+			fmt.Printf("Error starting background process: %v\n", err)
+			return
+		}
+
+		// 等待后台进程启动
+		time.Sleep(3 * time.Second)
+
+		fmt.Println("ELR 轻量级容器已启动！命令端口: 16888，您现在可以启动或停止容器。")
+	}
+}
+
+// startRuntimeBackground starts the ELR runtime in background mode
+func startRuntimeBackground() {
+	// Get runtime instance
+	runtime, err := getRuntime(false)
 	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
+		fmt.Printf("Error getting runtime: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Create runtime
-	runtime, err := elr.NewRuntime(config)
-	if err != nil {
-		fmt.Printf("Error creating runtime: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Start runtime
-	if err := runtime.Start(); err != nil {
+	// Start runtime without auto-starting containers, sandboxes, models
+	if err := runtime.Start(false); err != nil {
 		fmt.Printf("Error starting runtime: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Wait for signal to stop
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	<-sigCh
-
-	// Stop runtime
-	if err := runtime.Stop(); err != nil {
-		fmt.Printf("Error stopping runtime: %v\n", err)
-		os.Exit(1)
-	}
+	// Keep the process running
+	select {}
 }
 
 // Global runtime instance
@@ -934,7 +1036,7 @@ var globalRuntime *elr.Runtime
 var runtimeOnce sync.Once
 
 // getRuntime returns a runtime instance
-func getRuntime() (*elr.Runtime, error) {
+func getRuntime(autoStart ...bool) (*elr.Runtime, error) {
 	var err error
 	runtimeOnce.Do(func() {
 		config, loadErr := loadConfig()
@@ -949,11 +1051,35 @@ func getRuntime() (*elr.Runtime, error) {
 			return
 		}
 
-		// Start runtime if not already running
-		if loadErr := globalRuntime.Start(); loadErr != nil {
-			err = loadErr
-			return
+		// Start runtime only if autoStart is true (default is false)
+		start := false
+		if len(autoStart) > 0 {
+			start = autoStart[0]
 		}
+		if start {
+			if loadErr := globalRuntime.Start(false); loadErr != nil {
+				err = loadErr
+				return
+			}
+		} else {
+			// For list and status commands, just load containers without starting network service
+			if loadErr := globalRuntime.LoadContainers(); loadErr != nil {
+				fmt.Printf("Warning: failed to load existing containers: %v\n", loadErr)
+			}
+		}
+
+		// Start a goroutine to wait for signal to stop
+		go func() {
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+			<-sigCh
+
+			// Stop runtime
+			if err := globalRuntime.Stop(); err != nil {
+				fmt.Printf("Error stopping runtime: %v\n", err)
+			}
+		}()
 	})
 
 	if err != nil {
@@ -979,6 +1105,43 @@ func stopRuntime() {
 	}
 
 	fmt.Println("ELR runtime stopped successfully!")
+}
+
+// exitRuntime exits the ELR runtime
+func exitRuntime() {
+	fmt.Println("Exiting ELR runtime...")
+	
+	// Make HTTP request to exit runtime
+	resp, err := http.Post("http://localhost:16888/api/runtime/exit", "application/json", nil)
+	if err != nil {
+		fmt.Printf("Error connecting to ELR service: %v\n", err)
+		fmt.Println("Please make sure ELR is running.")
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+			fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
+		} else {
+			fmt.Printf("Error: %s\n", errorResponse["error"])
+		}
+		os.Exit(1)
+	}
+
+	// Decode response
+	var response map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(response["message"])
+	
+	// Wait for ELR to exit
+	time.Sleep(2 * time.Second)
 }
 
 // createContainer creates a new container
@@ -1098,8 +1261,48 @@ func runContainer() {
 	fmt.Printf("Container started successfully! ID: %s, Name: %s, Image: %s\n", container.ID, container.Name, container.Image)
 }
 
+// ensureELRRunning ensures ELR runtime is running, starts it if not
+func ensureELRRunning() {
+	if isELRRunning() {
+		return
+	}
+
+	fmt.Println("ELR runtime is not running, starting it...")
+
+	// 获取当前可执行文件路径
+	execPath, err := os.Executable()
+	if err != nil {
+		fmt.Printf("Error getting executable path: %v\n", err)
+		return
+	}
+
+	// 构建后台命令参数
+	args := []string{"start", "--background"}
+
+	// 启动后台进程
+	cmd := exec.Command(execPath, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
+	}
+
+	err = cmd.Start()
+	if err != nil {
+		fmt.Printf("Error starting background process: %v\n", err)
+		return
+	}
+
+	// 等待后台进程启动
+	fmt.Println("Waiting for ELR runtime to start...")
+	time.Sleep(3 * time.Second)
+	fmt.Println("ELR runtime started successfully!")
+}
+
 // startContainer starts a container
 func startContainer() {
+	// Ensure ELR runtime is running
+	ensureELRRunning()
+	
 	fmt.Println("Starting container...")
 	
 	// Parse arguments
@@ -1116,28 +1319,77 @@ func startContainer() {
 		os.Exit(1)
 	}
 
-	runtime, err := getRuntime()
+	// Check if container is already running by calling API
+	resp, err := http.Get("http://localhost:16888/api/container/running")
 	if err != nil {
-		fmt.Printf("Error getting runtime: %v\n", err)
+		fmt.Printf("Error checking container status: %v\n", err)
+		fmt.Println("Please make sure ELR is running.")
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
 		os.Exit(1)
 	}
 
-	container, err := runtime.GetContainer(id)
+	// Decode response
+	var runningContainers []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if container is in the running list
+	for _, container := range runningContainers {
+		if container["id"] == id {
+			fmt.Printf("Warning: Container %s is already running, no need to start again\n", id)
+			return
+		}
+	}
+
+	// Make HTTP request to start container
+	reqBody, err := json.Marshal(map[string]string{"id": id})
 	if err != nil {
-		fmt.Printf("Error getting container: %v\n", err)
+		fmt.Printf("Error marshaling request: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := container.Start(); err != nil {
-		fmt.Printf("Error starting container: %v\n", err)
+	resp, err = http.Post("http://localhost:16888/api/container/start", "application/json", bytes.NewBuffer(reqBody))
+	if err != nil {
+		fmt.Printf("Error connecting to ELR service: %v\n", err)
+		fmt.Println("Please make sure ELR is running.")
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+			fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
+		} else {
+			fmt.Printf("Error: %s\n", errorResponse["error"])
+		}
 		os.Exit(1)
 	}
 
-	fmt.Printf("Container started successfully! ID: %s, Name: %s\n", container.ID, container.Name)
+	// Decode response
+	var response map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(response["message"])
 }
 
 // stopContainer stops a container
 func stopContainer() {
+	// Ensure ELR runtime is running
+	ensureELRRunning()
+	
 	fmt.Println("Stopping container...")
 	
 	// Parse arguments
@@ -1154,31 +1406,86 @@ func stopContainer() {
 		os.Exit(1)
 	}
 
-	runtime, err := getRuntime()
+	// Check if container is already running by calling API
+	resp, err := http.Get("http://localhost:16888/api/container/running")
 	if err != nil {
-		fmt.Printf("Error getting runtime: %v\n", err)
+		fmt.Printf("Error checking container status: %v\n", err)
+		fmt.Println("Please make sure ELR is running.")
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
 		os.Exit(1)
 	}
 
-	container, err := runtime.GetContainer(id)
+	// Decode response
+	var runningContainers []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if container is in the running list
+	isRunning := false
+	for _, container := range runningContainers {
+		if container["id"] == id {
+			isRunning = true
+			break
+		}
+	}
+
+	if !isRunning {
+		fmt.Printf("Warning: Container %s is not running, no need to stop again\n", id)
+		return
+	}
+
+	// Make HTTP request to stop container
+	reqBody, err := json.Marshal(map[string]string{"id": id})
 	if err != nil {
-		fmt.Printf("Error getting container: %v\n", err)
+		fmt.Printf("Error marshaling request: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := container.Stop(); err != nil {
-		fmt.Printf("Error stopping container: %v\n", err)
+	resp, err = http.Post("http://localhost:16888/api/container/stop", "application/json", bytes.NewBuffer(reqBody))
+	if err != nil {
+		fmt.Printf("Error connecting to ELR service: %v\n", err)
+		fmt.Println("Please make sure ELR is running.")
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		var errorResponse map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&errorResponse); err != nil {
+			fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
+		} else {
+			fmt.Printf("Error: %s\n", errorResponse["error"])
+		}
 		os.Exit(1)
 	}
 
-	fmt.Printf("Container stopped successfully! ID: %s, Name: %s\n", container.ID, container.Name)
+	// Decode response
+	var response map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(response["message"])
 }
 
 // listContainers lists all containers
 func listContainers() {
+	// Ensure ELR runtime is running
+	ensureELRRunning()
+	
 	fmt.Println("Listing containers...")
 	
-	runtime, err := getRuntime()
+	runtime, err := getRuntime(false)
 	if err != nil {
 		fmt.Printf("Error getting runtime: %v\n", err)
 		os.Exit(1)
@@ -1191,12 +1498,111 @@ func listContainers() {
 		return
 	}
 
-	fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "ID", "Name", "Image", "Status", "Created")
-	fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "--", "----", "-----", "------", "-------")
+	// Get running containers from API
+	resp, err := http.Get("http://localhost:16888/api/container/running")
+	if err != nil {
+		fmt.Printf("Error checking running containers: %v\n", err)
+		// Fallback to local runtime container list
+		var runtimeContainerList *elr.RuntimeContainerList
+		runtimeContainerList = elr.GetRuntimeContainerList()
+		
+		fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+		fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
 
-	for _, container := range containers {
-		created := container.Created.Format("2006-01-02 15:04:05")
-		fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", container.ID, container.Name, container.Image, container.Status, created)
+		for _, container := range containers {
+			created := container.Created.Format("2006-01-02 15:04:05")
+			status := string(container.Status)
+			
+			// Check if container is in runtime container list
+			_, isRunning := runtimeContainerList.GetContainer(container.ID)
+			if isRunning {
+				status = "has run|running"
+			} else if container.Status == elr.ContainerStatusRunning {
+				status = "has run|Norunning"
+			}
+			
+			fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+		}
+	} else {
+		defer resp.Body.Close()
+		
+		// Check response status
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
+			// Fallback to local runtime container list
+			var runtimeContainerList *elr.RuntimeContainerList
+			runtimeContainerList = elr.GetRuntimeContainerList()
+			
+			fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+			fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+
+			for _, container := range containers {
+				created := container.Created.Format("2006-01-02 15:04:05")
+				status := string(container.Status)
+				
+				// Check if container is in runtime container list
+				_, isRunning := runtimeContainerList.GetContainer(container.ID)
+				if isRunning {
+					status = "has run|running"
+				} else if container.Status == elr.ContainerStatusRunning {
+					status = "has run|Norunning"
+				}
+				
+				fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+			}
+		} else {
+			// Decode response
+			var runningContainers []map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err != nil {
+				fmt.Printf("Error decoding response: %v\n", err)
+				// Fallback to local runtime container list
+				var runtimeContainerList *elr.RuntimeContainerList
+				runtimeContainerList = elr.GetRuntimeContainerList()
+				
+				fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+				fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+
+				for _, container := range containers {
+					created := container.Created.Format("2006-01-02 15:04:05")
+					status := string(container.Status)
+					
+					// Check if container is in runtime container list
+					_, isRunning := runtimeContainerList.GetContainer(container.ID)
+					if isRunning {
+						status = "has run|running"
+					} else if container.Status == elr.ContainerStatusRunning {
+						status = "has run|Norunning"
+					}
+					
+					fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+				}
+			} else {
+				// Create a map of running container IDs
+				runningContainerIDs := make(map[string]bool)
+				for _, container := range runningContainers {
+					if id, ok := container["id"].(string); ok {
+						runningContainerIDs[id] = true
+					}
+				}
+				
+				fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+				fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+
+				for _, container := range containers {
+					created := container.Created.Format("2006-01-02 15:04:05")
+					status := string(container.Status)
+					
+					// Check if container is in running container list from API
+					if runningContainerIDs[container.ID] {
+						status = "has run|running"
+					} else if container.Status == elr.ContainerStatusRunning {
+						status = "has run|Norunning"
+					}
+					
+					fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+				}
+			}
+		}
 	}
 
 	fmt.Printf("\nTotal containers: %d\n", len(containers))
@@ -1569,8 +1975,25 @@ func loadModelConfig() (*config.Config, error) {
 	
 	// 从 ELR 配置中获取模型目录
 	modelDir := "../micro_model/model/models"
-	if chatModelConfig, exists := elrConfig.Resources.ModelTypes["chat"]; exists {
-		modelDir = chatModelConfig.Dir
+	
+	// 优先使用任何启用的模型类型目录
+	for modelType, modelConfig := range elrConfig.Resources.ModelTypes {
+		if modelConfig.Enable && modelConfig.Dir != "" {
+			modelDir = modelConfig.Dir
+			fmt.Printf("Using model directory from ELR Settings for model type '%s': %s\n", modelType, modelConfig.Dir)
+			break
+		}
+	}
+	
+	// 如果没有启用的模型类型，使用任何启用的资源类型目录
+	if modelDir == "../micro_model/model/models" {
+		for resourceType, resourceConfig := range elrConfig.Resources.Types {
+			if resourceConfig.Enable && resourceConfig.Dir != "" {
+				modelDir = resourceConfig.Dir
+				fmt.Printf("Using resource directory from ELR Settings for resource type '%s': %s\n", resourceType, resourceConfig.Dir)
+				break
+			}
+		}
 	}
 	
 	// 创建配置
@@ -1620,44 +2043,78 @@ func sandboxCommand() {
 func listSandboxes() {
 	fmt.Println("Listing sandboxes...")
 
-	// 加载配置
-	modelConfig, err := loadModelConfig()
-	if err != nil {
-		fmt.Printf("Error loading model config: %v\n", err)
+	// 检查 ELR 是否在运行
+	if !isELRRunning() {
+		fmt.Println("Error: ELR is not running. Please start ELR first with 'elr start'")
 		os.Exit(1)
 	}
 
-	// 创建模型管理器
-	modelManager, err := model.NewModelManager(modelConfig)
+	// 发送 HTTP 请求
+	resp, err := http.Get("http://localhost:16888/api/sandbox/list")
 	if err != nil {
-		fmt.Printf("Error creating model manager: %v\n", err)
+		fmt.Printf("Error calling API: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading response: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 创建沙箱管理器
-	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
-	if err != nil {
-		fmt.Printf("Error creating sandbox manager: %v\n", err)
+	// 解析响应
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Printf("Error parsing response: %v\n", err)
+		fmt.Printf("Response: %s\n", string(body))
 		os.Exit(1)
 	}
 
-	// 列出沙箱
-	sandboxes := sandboxManager.ListSandboxes()
+	// 检查是否成功
+	if success, ok := result["success"].(bool); ok && success {
+		// 获取沙箱列表
+		if sandboxesRaw, ok := result["sandboxes"].([]interface{}); ok {
+			if len(sandboxesRaw) == 0 {
+				fmt.Println("No sandboxes found")
+				return
+			}
 
-	if len(sandboxes) == 0 {
-		fmt.Println("No sandboxes found")
-		return
+			fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "ID", "Name", "Container", "Status", "Created")
+			fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "--", "----", "---------", "------", "-------")
+
+			for _, s := range sandboxesRaw {
+				if sandbox, ok := s.(map[string]interface{}); ok {
+					id, _ := sandbox["id"].(string)
+					name, _ := sandbox["name"].(string)
+					container, _ := sandbox["container_id"].(string)
+					status, _ := sandbox["status"].(string)
+					created, _ := sandbox["created_at"].(string)
+
+					if name == "" {
+						name = id
+					}
+					if status == "" {
+						status = "unknown"
+					}
+
+					fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", id, name, container, status, created)
+				}
+			}
+
+			fmt.Printf("\nTotal sandboxes: %d\n", len(sandboxesRaw))
+		} else {
+			fmt.Println("No sandboxes found")
+		}
+	} else {
+		if errorMsg, ok := result["error"].(string); ok {
+			fmt.Printf("Error: %s\n", errorMsg)
+		} else {
+			fmt.Println("Error listing sandboxes")
+		}
+		os.Exit(1)
 	}
-
-	fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "ID", "Name", "Container", "Status", "Created")
-	fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "--", "----", "---------", "------", "-------")
-
-	for _, s := range sandboxes {
-		created := s.CreatedAt.Format("2006-01-02 15:04:05")
-		fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", s.ID, s.ID, s.Container, s.Status, created)
-	}
-
-	fmt.Printf("\nTotal sandboxes: %d\n", len(sandboxes))
 }
 
 // createSandbox 创建新沙箱
@@ -1709,6 +2166,98 @@ func createSandbox() {
 	fmt.Printf("Sandbox created successfully! ID: %s, Container: %s\n", s.ID, s.Container)
 }
 
+// findContainerFromSandboxState 从 sandbox-state.json 中查找沙箱所属的容器ID（兼容旧方案）
+func findContainerFromSandboxState(sandboxID, dataDir string) (string, error) {
+	// 查找 sandbox-state.json 文件
+	// 可能在当前目录或 ELR 数据目录
+	var sandboxStatePath string
+	
+	// 先查找当前目录
+	if _, err := os.Stat("sandbox-state.json"); err == nil {
+		sandboxStatePath = "sandbox-state.json"
+	} else {
+		// 查找 ELR 数据目录
+		sandboxStatePath = filepath.Join(dataDir, "..", "sandbox-state.json")
+		if _, err := os.Stat(sandboxStatePath); err != nil {
+			// 尝试在项目根目录查找
+			sandboxStatePath = filepath.Join("..", "sandbox-state.json")
+			if _, err := os.Stat(sandboxStatePath); err != nil {
+				return "", fmt.Errorf("sandbox-state.json not found")
+			}
+		}
+	}
+	
+	// 读取 sandbox-state.json
+	data, err := os.ReadFile(sandboxStatePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read sandbox-state.json: %v", err)
+	}
+	
+	// 解析 JSON
+	var sandboxes []map[string]interface{}
+	if err := json.Unmarshal(data, &sandboxes); err != nil {
+		return "", fmt.Errorf("failed to parse sandbox-state.json: %v", err)
+	}
+	
+	// 查找沙箱
+	for _, sandbox := range sandboxes {
+		if id, ok := sandbox["id"].(string); ok && id == sandboxID {
+			if container, ok := sandbox["container"].(string); ok {
+				return container, nil
+			}
+		}
+	}
+	
+	return "", fmt.Errorf("sandbox %s not found in sandbox-state.json", sandboxID)
+}
+
+// getSandboxRuntimeStatus 获取沙箱的运行时状态
+// 通过检查容器是否在运行来判断沙箱是否在运行
+func getSandboxRuntimeStatus(sandboxID, containerName string) string {
+	// 检查沙箱是否在沙箱-容器映射中
+	scm := elr.GetSandboxContainerManager()
+	if scm != nil {
+		// 尝试通过容器名称查找容器ID
+		containerID := elr.FindContainerIDByName(containerName)
+		if containerID != "" {
+			// 检查该容器是否在运行
+			// 从 API 获取运行中的容器列表
+			resp, err := http.Get("http://localhost:16888/api/container/running")
+			if err == nil {
+				defer resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					var runningContainers []map[string]interface{}
+					if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err == nil {
+						for _, container := range runningContainers {
+							if id, ok := container["id"].(string); ok && id == containerID {
+								return "has run|running"
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 检查沙箱状态是否在 sandbox-state.json 中是 running
+	sandboxStateFile := "./sandbox-state.json"
+	if data, err := os.ReadFile(sandboxStateFile); err == nil {
+		var sandboxes []map[string]interface{}
+		if err := json.Unmarshal(data, &sandboxes); err == nil {
+			for _, s := range sandboxes {
+				if id, ok := s["id"].(string); ok && id == sandboxID {
+					if status, ok := s["status"].(string); ok && status == "running" {
+						// 沙箱状态是 running，但容器可能不在运行
+						return "has run|Norunning"
+					}
+				}
+			}
+		}
+	}
+
+	return "stopped"
+}
+
 // startSandbox 启动沙箱
 func startSandbox() {
 	fmt.Println("Starting sandbox...")
@@ -1727,34 +2276,102 @@ func startSandbox() {
 		os.Exit(1)
 	}
 
-	// 加载配置
-	modelConfig, err := loadModelConfig()
+	// 检查 ELR 是否在运行
+	if !isELRRunning() {
+		fmt.Println("Error: ELR is not running. Please start ELR first with 'elr start'")
+		os.Exit(1)
+	}
+
+	// 获取用户主目录
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Printf("Error loading model config: %v\n", err)
-		os.Exit(1)
+		homeDir = "."
 	}
 
-	// 创建模型管理器
-	modelManager, err := model.NewModelManager(modelConfig)
+	// 构建数据目录
+	dataDir := filepath.Join(homeDir, ".elr", "data")
+
+	// 初始化沙箱-容器映射管理器
+	elr.InitSandboxContainerManager(dataDir)
+
+	// 获取沙箱所属的容器ID
+	scm := elr.GetSandboxContainerManager()
+	containerID, err := scm.GetContainerBySandbox(sandboxID)
 	if err != nil {
-		fmt.Printf("Error creating model manager: %v\n", err)
-		os.Exit(1)
+		// 兼容旧方案：从 sandbox-state.json 读取容器信息
+		fmt.Printf("Sandbox not found in mapping, trying to find in sandbox-state.json...\n")
+		containerID, err = findContainerFromSandboxState(sandboxID, dataDir)
+		if err != nil {
+			fmt.Printf("Error getting container for sandbox: %v\n", err)
+			os.Exit(1)
+		}
+		// 自动创建映射关系
+		fmt.Printf("Found container from sandbox-state.json: %s\n", containerID)
+		if err := scm.AddMapping(sandboxID, containerID); err != nil {
+			fmt.Printf("Warning: failed to add mapping: %v\n", err)
+		}
 	}
 
-	// 创建沙箱管理器
-	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	// 构建请求体
+	requestBody := map[string]interface{}{
+		"sandbox_id": sandboxID,
+	}
+
+	// 序列化请求体
+	jsonBody, err := json.Marshal(requestBody)
 	if err != nil {
-		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		fmt.Printf("Error creating request: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 启动沙箱
-	if err := sandboxManager.StartSandbox(sandboxID); err != nil {
-		fmt.Printf("Error starting sandbox: %v\n", err)
+	// 发送 HTTP 请求
+	resp, err := http.Post(
+		"http://localhost:16888/api/sandbox/start",
+		"application/json",
+		bytes.NewBuffer(jsonBody),
+	)
+	if err != nil {
+		fmt.Printf("Error calling API: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading response: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Sandbox started successfully! ID: %s\n", sandboxID)
+	// 解析响应
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Printf("Error parsing response: %v\n", err)
+		fmt.Printf("Response: %s\n", string(body))
+		os.Exit(1)
+	}
+
+	// 检查是否成功
+	if success, ok := result["success"].(bool); ok && success {
+		if message, ok := result["message"].(string); ok {
+			fmt.Println(message)
+		}
+
+		// 将沙箱添加到运行时列表
+		rsl := elr.GetRuntimeSandboxList()
+		if err := rsl.AddSandbox(sandboxID, containerID); err != nil {
+			fmt.Printf("Warning: failed to add sandbox to runtime list: %v\n", err)
+		}
+
+		fmt.Printf("Sandbox started successfully! ID: %s, Container: %s\n", sandboxID, containerID)
+	} else {
+		if errorMsg, ok := result["error"].(string); ok {
+			fmt.Printf("Error: %s\n", errorMsg)
+		} else {
+			fmt.Println("Error starting sandbox")
+		}
+		os.Exit(1)
+	}
 }
 
 // stopSandbox 停止沙箱
@@ -2138,40 +2755,68 @@ func runModelInSandbox() {
 
 // checkStatus 检查系统状态
 func checkStatus() {
+	// Ensure ELR runtime is running
+	ensureELRRunning()
+	
 	// 检查是否有参数
 	checkAll := true
 	checkContainers := false
 	checkSandboxes := false
 	checkModels := false
 	checkAPI := false
+	checkResources := false
+	
+	// 存储 ID 参数
+	containerID := ""
+	sandboxID := ""
+	modelID := ""
 	
 	// 解析参数
 	if len(os.Args) > 2 {
 		checkAll = false
-		for _, arg := range os.Args[2:] {
+		for i := 2; i < len(os.Args); i++ {
+			arg := os.Args[i]
 			switch arg {
 			case "containers":
 				checkContainers = true
+				// 检查是否有 ID 参数
+				if i+1 < len(os.Args) && os.Args[i+1] != "sandboxes" && os.Args[i+1] != "models" && os.Args[i+1] != "api" && os.Args[i+1] != "resources" {
+					containerID = os.Args[i+1]
+					i++
+				}
 			case "sandboxes":
 				checkSandboxes = true
+				// 检查是否有 ID 参数
+				if i+1 < len(os.Args) && os.Args[i+1] != "containers" && os.Args[i+1] != "models" && os.Args[i+1] != "api" && os.Args[i+1] != "resources" {
+					sandboxID = os.Args[i+1]
+					i++
+				}
 			case "models":
 				checkModels = true
+				// 检查是否有 ID 参数
+				if i+1 < len(os.Args) && os.Args[i+1] != "containers" && os.Args[i+1] != "sandboxes" && os.Args[i+1] != "api" && os.Args[i+1] != "resources" {
+					modelID = os.Args[i+1]
+					i++
+				}
 			case "api":
 				checkAPI = true
+			case "resources":
+				checkResources = true
 			default:
 				fmt.Printf("Error: Unknown status parameter: %s\n", arg)
-				fmt.Println("Available parameters: containers, sandboxes, models, api")
+				fmt.Println("Available parameters: containers, sandboxes, models, api, resources")
 				os.Exit(1)
 			}
 		}
 	}
 	
-	// 如果没有指定参数，检查所有
+	// 如果没有指定参数，检查所有，但不包括资源状态
 	if checkAll {
 		checkContainers = true
 		checkSandboxes = true
 		checkModels = true
 		checkAPI = true
+		checkResources = false
 	}
 	
 	fmt.Println("Checking ELR system status...")
@@ -2179,21 +2824,244 @@ func checkStatus() {
 	// 检查容器状态
 	if checkContainers {
 		fmt.Println("\n=== Container Status ===")
-		runtime, err := getRuntime()
+		runtime, err := getRuntime(false)
 		if err != nil {
 			fmt.Printf("Error getting runtime: %v\n", err)
 		} else {
 			containers := runtime.ListContainers()
-			if len(containers) == 0 {
-				fmt.Println("No containers found")
-			} else {
-				fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "ID", "Name", "Image", "Status", "Created")
-				fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "--", "----", "-----", "------", "-------")
-				for _, container := range containers {
-					created := container.Created.Format("2006-01-02 15:04:05")
-					fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", container.ID, container.Name, container.Image, container.Status, created)
+			
+			// Get running containers from API
+			resp, err := http.Get("http://localhost:16888/api/container/running")
+			if err != nil {
+				fmt.Printf("Error checking running containers: %v\n", err)
+				// Fallback to local runtime container list
+				var runtimeContainerList *elr.RuntimeContainerList
+				runtimeContainerList = elr.GetRuntimeContainerList()
+				
+				if len(containers) == 0 {
+					fmt.Println("No containers found")
+				} else if containerID != "" {
+					// 查找指定 ID 的容器
+					found := false
+					for _, container := range containers {
+						if container.ID == containerID {
+							found = true
+							fmt.Printf("ID: %s\n", container.ID)
+							fmt.Printf("Name: %s\n", container.Name)
+							fmt.Printf("Image: %s\n", container.Image)
+							
+							// Check if container is in runtime container list
+							status := string(container.Status)
+							_, isRunning := runtimeContainerList.GetContainer(container.ID)
+							if isRunning {
+								status = "has run|running"
+							} else if container.Status == elr.ContainerStatusRunning {
+								status = "has run|Norunning"
+							}
+							
+							fmt.Printf("Status: %s\n", status)
+							fmt.Printf("Created: %s\n", container.Created.Format("2006-01-02 15:04:05"))
+							break
+						}
+					}
+					if !found {
+						fmt.Printf("Container with ID %s not found\n", containerID)
+					}
+				} else {
+					// 显示所有容器
+					fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+					fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+					for _, container := range containers {
+						created := container.Created.Format("2006-01-02 15:04:05")
+						status := string(container.Status)
+						
+						// Check if container is in runtime container list
+						_, isRunning := runtimeContainerList.GetContainer(container.ID)
+						if isRunning {
+							status = "has run|running"
+						} else if container.Status == elr.ContainerStatusRunning {
+							status = "has run|Norunning"
+						}
+						
+						fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+					}
+					fmt.Printf("\nTotal containers: %d\n", len(containers))
 				}
-				fmt.Printf("\nTotal containers: %d\n", len(containers))
+			} else {
+				defer resp.Body.Close()
+				
+				// Check response status
+				if resp.StatusCode != http.StatusOK {
+					fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
+					// Fallback to local runtime container list
+					var runtimeContainerList *elr.RuntimeContainerList
+					runtimeContainerList = elr.GetRuntimeContainerList()
+					
+					if len(containers) == 0 {
+						fmt.Println("No containers found")
+					} else if containerID != "" {
+						// 查找指定 ID 的容器
+						found := false
+						for _, container := range containers {
+							if container.ID == containerID {
+								found = true
+								fmt.Printf("ID: %s\n", container.ID)
+								fmt.Printf("Name: %s\n", container.Name)
+								fmt.Printf("Image: %s\n", container.Image)
+								
+								// Check if container is in runtime container list
+								status := string(container.Status)
+								_, isRunning := runtimeContainerList.GetContainer(container.ID)
+								if isRunning {
+									status = "has run|running"
+								} else if container.Status == elr.ContainerStatusRunning {
+									status = "has run|Norunning"
+								}
+								
+								fmt.Printf("Status: %s\n", status)
+								fmt.Printf("Created: %s\n", container.Created.Format("2006-01-02 15:04:05"))
+								break
+							}
+						}
+						if !found {
+							fmt.Printf("Container with ID %s not found\n", containerID)
+						}
+					} else {
+						// 显示所有容器
+						fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+						fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+						for _, container := range containers {
+							created := container.Created.Format("2006-01-02 15:04:05")
+							status := string(container.Status)
+							
+							// Check if container is in runtime container list
+							_, isRunning := runtimeContainerList.GetContainer(container.ID)
+							if isRunning {
+								status = "has run|running"
+							} else if container.Status == elr.ContainerStatusRunning {
+								status = "has run|Norunning"
+							}
+							
+							fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+						}
+						fmt.Printf("\nTotal containers: %d\n", len(containers))
+					}
+				} else {
+					// Decode response
+					var runningContainers []map[string]interface{}
+					if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err != nil {
+						fmt.Printf("Error decoding response: %v\n", err)
+						// Fallback to local runtime container list
+						var runtimeContainerList *elr.RuntimeContainerList
+						runtimeContainerList = elr.GetRuntimeContainerList()
+						
+						if len(containers) == 0 {
+							fmt.Println("No containers found")
+						} else if containerID != "" {
+							// 查找指定 ID 的容器
+							found := false
+							for _, container := range containers {
+								if container.ID == containerID {
+									found = true
+									fmt.Printf("ID: %s\n", container.ID)
+									fmt.Printf("Name: %s\n", container.Name)
+									fmt.Printf("Image: %s\n", container.Image)
+									
+									// Check if container is in runtime container list
+									status := string(container.Status)
+									_, isRunning := runtimeContainerList.GetContainer(container.ID)
+									if isRunning {
+										status = "has run|running"
+									} else if container.Status == elr.ContainerStatusRunning {
+										status = "has run|Norunning"
+									}
+									
+									fmt.Printf("Status: %s\n", status)
+									fmt.Printf("Created: %s\n", container.Created.Format("2006-01-02 15:04:05"))
+									break
+								}
+							}
+							if !found {
+								fmt.Printf("Container with ID %s not found\n", containerID)
+							}
+						} else {
+							// 显示所有容器
+							fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+							fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+							for _, container := range containers {
+								created := container.Created.Format("2006-01-02 15:04:05")
+								status := string(container.Status)
+								
+								// Check if container is in runtime container list
+								_, isRunning := runtimeContainerList.GetContainer(container.ID)
+								if isRunning {
+									status = "has run|running"
+								} else if container.Status == elr.ContainerStatusRunning {
+									status = "has run|Norunning"
+								}
+								
+								fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+							}
+							fmt.Printf("\nTotal containers: %d\n", len(containers))
+						}
+					} else {
+						// Create a map of running container IDs
+						runningContainerIDs := make(map[string]bool)
+						for _, container := range runningContainers {
+							if id, ok := container["id"].(string); ok {
+								runningContainerIDs[id] = true
+							}
+						}
+						
+						if len(containers) == 0 {
+							fmt.Println("No containers found")
+						} else if containerID != "" {
+							// 查找指定 ID 的容器
+							found := false
+							for _, container := range containers {
+								if container.ID == containerID {
+									found = true
+									fmt.Printf("ID: %s\n", container.ID)
+									fmt.Printf("Name: %s\n", container.Name)
+									fmt.Printf("Image: %s\n", container.Image)
+									
+									// Check if container is in running container list from API
+									status := string(container.Status)
+									if runningContainerIDs[container.ID] {
+										status = "has run|running"
+									} else if container.Status == elr.ContainerStatusRunning {
+										status = "has run|Norunning"
+									}
+									
+									fmt.Printf("Status: %s\n", status)
+									fmt.Printf("Created: %s\n", container.Created.Format("2006-01-02 15:04:05"))
+									break
+								}
+							}
+							if !found {
+								fmt.Printf("Container with ID %s not found\n", containerID)
+							}
+						} else {
+							// 显示所有容器
+							fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "ID", "Name", "Image", "Status", "Created")
+							fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", "--", "----", "-----", "------", "-------")
+							for _, container := range containers {
+								created := container.Created.Format("2006-01-02 15:04:05")
+								status := string(container.Status)
+								
+								// Check if container is in running container list from API
+								if runningContainerIDs[container.ID] {
+									status = "has run|running"
+								} else if container.Status == elr.ContainerStatusRunning {
+									status = "has run|Norunning"
+								}
+								
+								fmt.Printf("%-20s %-15s %-15s %-25s %-20s\n", container.ID, container.Name, container.Image, status, created)
+							}
+							fmt.Printf("\nTotal containers: %d\n", len(containers))
+						}
+					}
+				}
 			}
 		}
 	}
@@ -2201,39 +3069,78 @@ func checkStatus() {
 	// 检查沙箱状态
 	if checkSandboxes {
 		fmt.Println("\n=== Sandbox Status ===")
-		modelConfig, err := loadModelConfig()
+
+		// 获取用户主目录
+		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			fmt.Printf("Error loading model config: %v\n", err)
-		} else {
-			modelManager, err := model.NewModelManager(modelConfig)
-			if err != nil {
-				fmt.Printf("Error creating model manager: %v\n", err)
-			} else {
-				sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
-				if err != nil {
-					fmt.Printf("Error creating sandbox manager: %v\n", err)
-				} else {
-					sandboxes := sandboxManager.ListSandboxes()
-					if len(sandboxes) == 0 {
-						fmt.Println("No sandboxes found")
-					} else {
-						fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "ID", "Name", "Container", "Status", "Created")
-						fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "--", "----", "---------", "------", "-------")
-						for _, s := range sandboxes {
-							created := s.CreatedAt.Format("2006-01-02 15:04:05")
-							fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", s.ID, s.ID, s.Container, s.Status, created)
-							// 显示沙箱中的模型
-							if len(s.Models) > 0 {
-								fmt.Println("  Models:")
-								for modelID, modelInfo := range s.Models {
-									fmt.Printf("    - %s (%s): %s\n", modelInfo.Name, modelID, modelInfo.Status)
-								}
-							}
-						}
-						fmt.Printf("\nTotal sandboxes: %d\n", len(sandboxes))
+			homeDir = "."
+		}
+
+		// 构建数据目录
+		dataDir := filepath.Join(homeDir, ".elr", "data")
+
+		// 初始化沙箱-容器映射管理器
+		elr.InitSandboxContainerManager(dataDir)
+
+		// 从 sandbox-state.json 读取沙箱数据
+		sandboxStateFile := "./sandbox-state.json"
+		var sandboxes []map[string]interface{}
+
+		if data, err := os.ReadFile(sandboxStateFile); err == nil {
+			if err := json.Unmarshal(data, &sandboxes); err == nil {
+				// 成功读取
+			}
+		}
+
+		if len(sandboxes) == 0 {
+			fmt.Println("No sandboxes found")
+		} else if sandboxID != "" {
+			// 查找指定 ID 的沙箱
+			found := false
+			for _, s := range sandboxes {
+				if id, ok := s["id"].(string); ok && id == sandboxID {
+					found = true
+					fmt.Printf("ID: %s\n", s["id"])
+					fmt.Printf("Name: %s\n", s["id"])
+					container, _ := s["container"].(string)
+					fmt.Printf("Container: %s\n", container)
+
+					// 使用运行时沙箱列表获取真实状态
+					status := elr.GetSandboxStatus(s["id"].(string))
+					fmt.Printf("Status: %s\n", status)
+
+					if createdAt, ok := s["created_at"].(string); ok {
+						fmt.Printf("Created: %s\n", createdAt)
 					}
+					break
 				}
 			}
+			if !found {
+				fmt.Printf("Sandbox with ID %s not found\n", sandboxID)
+			}
+		} else {
+			// 显示所有沙箱
+			fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "ID", "Name", "Container", "Status", "Created")
+			fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "--", "----", "---------", "------", "-------")
+			for _, s := range sandboxes {
+				id, _ := s["id"].(string)
+				container, _ := s["container"].(string)
+
+				// 获取沙箱状态
+				status := getSandboxRuntimeStatus(id, container)
+
+				createdAt := ""
+				if ca, ok := s["created_at"].(string); ok {
+					createdAt = ca
+					// 只显示日期部分
+					if len(createdAt) > 10 {
+						createdAt = createdAt[:10]
+					}
+				}
+
+				fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", id, id, container, status, createdAt)
+			}
+			fmt.Printf("\nTotal sandboxes: %d\n", len(sandboxes))
 		}
 	}
 	
@@ -2258,7 +3165,35 @@ func checkStatus() {
 					} else {
 						if len(models) == 0 {
 							fmt.Println("No models found")
+						} else if modelID != "" {
+							// 查找指定 ID 的模型
+							found := false
+							for _, m := range models {
+								if m.ID == modelID {
+									found = true
+									// 检查模型在哪个沙箱中运行
+									runningIn := "Not running"
+									sandboxes := sandboxManager.ListSandboxes()
+									for _, s := range sandboxes {
+										if modelInfo, ok := s.Models[m.ID]; ok && modelInfo.Status == "running" {
+											runningIn = s.ID
+											break
+										}
+									}
+									fmt.Printf("ID: %s\n", m.ID)
+									fmt.Printf("Name: %s\n", m.Name)
+									fmt.Printf("Type: %s\n", m.Type)
+									fmt.Printf("Version: %s\n", m.Version)
+									fmt.Printf("Path: %s\n", m.Path)
+									fmt.Printf("Running in Sandbox: %s\n", runningIn)
+									break
+								}
+							}
+							if !found {
+								fmt.Printf("Model with ID %s not found\n", modelID)
+							}
 						} else {
+							// 显示所有模型
 							fmt.Printf("%-20s %-15s %-15s %-10s %-20s %-30s\n", "ID", "Name", "Type", "Version", "Path", "Running in Sandbox")
 							fmt.Printf("%-20s %-15s %-15s %-10s %-20s %-30s\n", "--", "----", "----", "-------", "----", "------------------")
 							for _, m := range models {
@@ -2286,6 +3221,126 @@ func checkStatus() {
 		fmt.Println("\n=== API Service Status ===")
 		// 这里可以添加API服务状态检查逻辑
 		fmt.Println("API service status: Not implemented yet")
+	}
+	
+	// 检查资源使用情况
+	if checkResources {
+		fmt.Println("\n=== Resource Usage Status ===")
+		
+		// 调用 API 获取容器资源使用情况
+		resp, err := http.Get("http://localhost:16888/api/container/resources")
+		if err != nil {
+			fmt.Printf("Error checking resource usage: %v\n", err)
+			fmt.Println("Please make sure ELR is running.")
+			// Fallback to local resource check
+			// 创建监控服务
+			monitorConfig := &config.MonitoringConfig{
+				Enabled:         true,
+				PrometheusPort:  9090,
+				Interval:        10,
+			}
+			// 获取 runtime 实例
+			runtime, err := getRuntime()
+			if err != nil {
+				fmt.Printf("Error getting runtime: %v\n", err)
+			} else {
+				// 创建监控服务并传递 runtime 实例
+				monitorService, err := monitor.NewMonitorService(monitorConfig, runtime)
+				if err != nil {
+					fmt.Printf("Error creating monitor service: %v\n", err)
+				} else {
+					// 显示资源状态
+					monitorService.DisplayResourceStatus()
+				}
+			}
+		} else {
+			defer resp.Body.Close()
+			
+			// Check response status
+			if resp.StatusCode != http.StatusOK {
+				fmt.Printf("Error: ELR service returned status %d\n", resp.StatusCode)
+				// Fallback to local resource check
+				// 创建监控服务
+				monitorConfig := &config.MonitoringConfig{
+					Enabled:         true,
+					PrometheusPort:  9090,
+					Interval:        10,
+				}
+				// 获取 runtime 实例
+				runtime, err := getRuntime()
+				if err != nil {
+					fmt.Printf("Error getting runtime: %v\n", err)
+				} else {
+					// 创建监控服务并传递 runtime 实例
+					monitorService, err := monitor.NewMonitorService(monitorConfig, runtime)
+					if err != nil {
+						fmt.Printf("Error creating monitor service: %v\n", err)
+					} else {
+						// 显示资源状态
+						monitorService.DisplayResourceStatus()
+					}
+				}
+			} else {
+				// Decode response
+				var resourceStatus map[string]interface{}
+				if err := json.NewDecoder(resp.Body).Decode(&resourceStatus); err != nil {
+					fmt.Printf("Error decoding response: %v\n", err)
+					// Fallback to local resource check
+					// 创建监控服务
+					monitorConfig := &config.MonitoringConfig{
+						Enabled:         true,
+						PrometheusPort:  9090,
+						Interval:        10,
+					}
+					// 获取 runtime 实例
+					runtime, err := getRuntime()
+					if err != nil {
+						fmt.Printf("Error getting runtime: %v\n", err)
+					} else {
+						// 创建监控服务并传递 runtime 实例
+						monitorService, err := monitor.NewMonitorService(monitorConfig, runtime)
+						if err != nil {
+							fmt.Printf("Error creating monitor service: %v\n", err)
+						} else {
+							// 显示资源状态
+							monitorService.DisplayResourceStatus()
+						}
+					}
+				} else {
+					// 显示资源状态
+					fmt.Println("Container resource usage:")
+					if containers, ok := resourceStatus["containers"].([]interface{}); ok {
+						if len(containers) == 0 {
+							fmt.Println("No running containers found")
+						} else {
+							for _, container := range containers {
+								if containerMap, ok := container.(map[string]interface{}); ok {
+									fmt.Printf("\nContainer: %s\n", containerMap["id"])
+									if name, ok := containerMap["name"].(string); ok {
+										fmt.Printf("Name: %s\n", name)
+									}
+									if pid, ok := containerMap["pid"].(float64); ok {
+										fmt.Printf("PID: %.0f\n", pid)
+									}
+									if resources, ok := containerMap["resources"].(map[string]interface{}); ok {
+										fmt.Println("Resource usage:")
+										if cpu, ok := resources["cpu"].(float64); ok {
+											fmt.Printf("  CPU: %.2f%%\n", cpu)
+										}
+										if memory, ok := resources["memory"].(float64); ok {
+											fmt.Printf("  Memory: %.2f MB\n", memory)
+										}
+										if disk, ok := resources["disk"].(float64); ok {
+											fmt.Printf("  Disk: %.2f MB\n", disk)
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	
 	fmt.Println("\nStatus check completed!")
@@ -3114,8 +4169,15 @@ func startAPIServices() {
 			os.Exit(1)
 		}
 		
+		// 获取 runtime 实例
+		runtime, err := getRuntime()
+		if err != nil {
+			fmt.Printf("Error getting runtime: %v\n", err)
+			os.Exit(1)
+		}
+		
 		// 创建监控服务
-		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring)
+		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring, runtime)
 		if err != nil {
 			fmt.Printf("Error creating monitor service: %v\n", err)
 			os.Exit(1)
@@ -3183,8 +4245,15 @@ func startAPIServices() {
 			os.Exit(1)
 		}
 		
+		// 获取 runtime 实例
+		runtime, err := getRuntime()
+		if err != nil {
+			fmt.Printf("Error getting runtime: %v\n", err)
+			os.Exit(1)
+		}
+		
 		// 创建监控服务
-		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring)
+		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring, runtime)
 		if err != nil {
 			fmt.Printf("Error creating monitor service: %v\n", err)
 			os.Exit(1)
@@ -3801,8 +4870,15 @@ func startAPIServicesBackground() {
 			os.Exit(1)
 		}
 		
+		// 获取 runtime 实例
+		runtime, err := getRuntime()
+		if err != nil {
+			fmt.Printf("Error getting runtime: %v\n", err)
+			os.Exit(1)
+		}
+		
 		// 创建监控服务
-		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring)
+		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring, runtime)
 		if err != nil {
 			fmt.Printf("Error creating monitor service: %v\n", err)
 			os.Exit(1)
@@ -3870,8 +4946,15 @@ func startAPIServicesBackground() {
 			os.Exit(1)
 		}
 		
+		// 获取 runtime 实例
+		runtime, err := getRuntime()
+		if err != nil {
+			fmt.Printf("Error getting runtime: %v\n", err)
+			os.Exit(1)
+		}
+		
 		// 创建监控服务
-		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring)
+		monitorService, err := monitor.NewMonitorService(&modelConfig.Monitoring, runtime)
 		if err != nil {
 			fmt.Printf("Error creating monitor service: %v\n", err)
 			os.Exit(1)
@@ -5461,6 +6544,509 @@ func setupCommand() {
 	fmt.Println("Setup completed successfully!")
 }
 
+// 项目管理命令处理函数
+func projectCommand() {
+	if len(os.Args) < 3 {
+		fmt.Println("Error: Project subcommand is required")
+		printHelp()
+		os.Exit(1)
+	}
+
+	subcommand := os.Args[2]
+
+	switch subcommand {
+	case "list":
+		listProjects()
+	case "create":
+		createProject()
+	case "delete":
+		deleteProject()
+	case "deploy":
+		deployProject()
+	case "undeploy":
+		undeployProject()
+	case "start":
+		startProject()
+	case "stop":
+		stopProject()
+	case "status":
+		checkProjectStatus()
+	default:
+		fmt.Printf("Unknown project subcommand: %s\n", subcommand)
+		printHelp()
+		os.Exit(1)
+	}
+}
+
+// listProjects 列出所有项目
+func listProjects() {
+	fmt.Println("Listing projects...")
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 获取项目管理器
+	projectManager := sandboxManager.GetProjectManager()
+
+	// 列出项目
+	projects := projectManager.ListProjects()
+
+	if len(projects) == 0 {
+		fmt.Println("No projects found")
+		return
+	}
+
+	fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "ID", "Name", "Type", "Status", "Created")
+	fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", "--", "----", "----", "------", "-------")
+
+	for _, p := range projects {
+		created := p.CreatedAt.Format("2006-01-02 15:04:05")
+		fmt.Printf("%-20s %-15s %-15s %-10s %-20s\n", p.ID, p.Name, p.Type, p.Status, created)
+	}
+
+	fmt.Printf("\nTotal projects: %d\n", len(projects))
+}
+
+// createProject 创建新项目
+func createProject() {
+	fmt.Println("Creating project...")
+
+	// 解析参数
+	name := ""
+	projectType := ""
+	version := ""
+	description := ""
+	path := ""
+
+	for i := 3; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--name":
+			if i+1 < len(os.Args) {
+				name = os.Args[i+1]
+			}
+		case "--project-type":
+			if i+1 < len(os.Args) {
+				projectType = os.Args[i+1]
+			}
+		case "--version":
+			if i+1 < len(os.Args) {
+				version = os.Args[i+1]
+			}
+		case "--description":
+			if i+1 < len(os.Args) {
+				description = os.Args[i+1]
+			}
+		case "--path":
+			if i+1 < len(os.Args) {
+				path = os.Args[i+1]
+			}
+		}
+	}
+
+	if name == "" || projectType == "" || path == "" {
+		fmt.Println("Error: Project name, type, and path are required")
+		os.Exit(1)
+	}
+
+	if version == "" {
+		version = "1.0.0"
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 获取项目管理器
+	projectManager := sandboxManager.GetProjectManager()
+
+	// 创建项目配置
+	projectConfig := project.ProjectConfig{
+		Name:        name,
+		Type:        project.ProjectType(projectType),
+		Version:     version,
+		Description: description,
+		Path:        path,
+		Properties:  &project.Properties{},
+	}
+
+	// 创建项目
+	p, err := projectManager.CreateProject(projectConfig)
+	if err != nil {
+		fmt.Printf("Error creating project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project created successfully! ID: %s, Name: %s, Type: %s\n", p.ID, p.Name, p.Type)
+}
+
+// deleteProject 删除项目
+func deleteProject() {
+	fmt.Println("Deleting project...")
+
+	// 解析参数
+	projectID := ""
+	for i := 3; i < len(os.Args); i++ {
+		if os.Args[i] == "--project-id" && i+1 < len(os.Args) {
+			projectID = os.Args[i+1]
+			break
+		}
+	}
+
+	if projectID == "" {
+		fmt.Println("Error: Project ID is required")
+		os.Exit(1)
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 获取项目管理器
+	projectManager := sandboxManager.GetProjectManager()
+
+	// 删除项目
+	if err := projectManager.DeleteProject(projectID); err != nil {
+		fmt.Printf("Error deleting project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project deleted successfully! ID: %s\n", projectID)
+}
+
+// deployProject 部署项目到沙箱
+func deployProject() {
+	fmt.Println("Deploying project to sandbox...")
+
+	// 解析参数
+	projectID := ""
+	sandboxID := ""
+
+	for i := 3; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--project-id":
+			if i+1 < len(os.Args) {
+				projectID = os.Args[i+1]
+			}
+		case "--sandbox-id":
+			if i+1 < len(os.Args) {
+				sandboxID = os.Args[i+1]
+			}
+		}
+	}
+
+	if projectID == "" || sandboxID == "" {
+		fmt.Println("Error: Project ID and Sandbox ID are required")
+		os.Exit(1)
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 部署项目
+	if err := sandboxManager.LoadProject(sandboxID, projectID); err != nil {
+		fmt.Printf("Error deploying project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project deployed successfully! Project ID: %s, Sandbox ID: %s\n", projectID, sandboxID)
+}
+
+// undeployProject 从沙箱卸载项目
+func undeployProject() {
+	fmt.Println("Undeploying project from sandbox...")
+
+	// 解析参数
+	projectID := ""
+	sandboxID := ""
+
+	for i := 3; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--project-id":
+			if i+1 < len(os.Args) {
+				projectID = os.Args[i+1]
+			}
+		case "--sandbox-id":
+			if i+1 < len(os.Args) {
+				sandboxID = os.Args[i+1]
+			}
+		}
+	}
+
+	if projectID == "" || sandboxID == "" {
+		fmt.Println("Error: Project ID and Sandbox ID are required")
+		os.Exit(1)
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 卸载项目
+	if err := sandboxManager.UnloadProject(sandboxID, projectID); err != nil {
+		fmt.Printf("Error undeploying project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project undeployed successfully! Project ID: %s, Sandbox ID: %s\n", projectID, sandboxID)
+}
+
+// startProject 启动项目
+func startProject() {
+	fmt.Println("Starting project...")
+
+	// 解析参数
+	projectID := ""
+	sandboxID := ""
+
+	for i := 3; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--project-id":
+			if i+1 < len(os.Args) {
+				projectID = os.Args[i+1]
+			}
+		case "--sandbox-id":
+			if i+1 < len(os.Args) {
+				sandboxID = os.Args[i+1]
+			}
+		}
+	}
+
+	if projectID == "" || sandboxID == "" {
+		fmt.Println("Error: Project ID and Sandbox ID are required")
+		os.Exit(1)
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 启动项目
+	if err := sandboxManager.StartProject(sandboxID, projectID); err != nil {
+		fmt.Printf("Error starting project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project started successfully! Project ID: %s, Sandbox ID: %s\n", projectID, sandboxID)
+}
+
+// stopProject 停止项目
+func stopProject() {
+	fmt.Println("Stopping project...")
+
+	// 解析参数
+	projectID := ""
+	sandboxID := ""
+
+	for i := 3; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--project-id":
+			if i+1 < len(os.Args) {
+				projectID = os.Args[i+1]
+			}
+		case "--sandbox-id":
+			if i+1 < len(os.Args) {
+				sandboxID = os.Args[i+1]
+			}
+		}
+	}
+
+	if projectID == "" || sandboxID == "" {
+		fmt.Println("Error: Project ID and Sandbox ID are required")
+		os.Exit(1)
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 停止项目
+	if err := sandboxManager.StopProject(sandboxID, projectID); err != nil {
+		fmt.Printf("Error stopping project: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project stopped successfully! Project ID: %s, Sandbox ID: %s\n", projectID, sandboxID)
+}
+
+// checkProjectStatus 检查项目状态
+func checkProjectStatus() {
+	fmt.Println("Checking project status...")
+
+	// 解析参数
+	projectID := ""
+	sandboxID := ""
+
+	for i := 3; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "--project-id":
+			if i+1 < len(os.Args) {
+				projectID = os.Args[i+1]
+			}
+		case "--sandbox-id":
+			if i+1 < len(os.Args) {
+				sandboxID = os.Args[i+1]
+			}
+		}
+	}
+
+	if projectID == "" || sandboxID == "" {
+		fmt.Println("Error: Project ID and Sandbox ID are required")
+		os.Exit(1)
+	}
+
+	// 加载配置
+	modelConfig, err := loadModelConfig()
+	if err != nil {
+		fmt.Printf("Error loading model config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建模型管理器
+	modelManager, err := model.NewModelManager(modelConfig)
+	if err != nil {
+		fmt.Printf("Error creating model manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 创建沙箱管理器
+	sandboxManager, err := sandbox.NewSandboxManager(modelConfig, modelManager)
+	if err != nil {
+		fmt.Printf("Error creating sandbox manager: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 获取项目状态
+	status, err := sandboxManager.GetProjectStatus(sandboxID, projectID)
+	if err != nil {
+		fmt.Printf("Error checking project status: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Project status: %s\n", status)
+}
+
+
 // isWindowsContainerAvailable 检查 Windows Container 功能是否可用
 func isWindowsContainerAvailable() bool {
 	// 尝试执行 powershell 命令检查容器功能
@@ -6404,6 +7990,201 @@ func copyDirectory(src, dst string) error {
 		fmt.Println() // 换行
 		fmt.Printf("Directory copied successfully! Total size: %.2f MB\n", float64(totalCopied)/1024/1024)
 	}
-	
+
 	return err
+}
+
+// startInteractiveConsole starts an interactive command console
+func startInteractiveConsole() {
+	fmt.Println("========================================")
+	fmt.Println("  ELR Interactive Console")
+	fmt.Println("========================================")
+	fmt.Println("Type 'help' for available commands")
+	fmt.Println("Type 'quit' or 'exit' to exit the console")
+	fmt.Println()
+
+	// Start the runtime if not already running
+	if !isELRRunning() {
+		fmt.Println("Starting ELR runtime...")
+		runtime, err := getRuntime(false)
+		if err != nil {
+			fmt.Printf("Error getting runtime: %v\n", err)
+			return
+		}
+
+		if err := runtime.Start(false); err != nil {
+			fmt.Printf("Error starting runtime: %v\n", err)
+			return
+		}
+
+		fmt.Println("ELR runtime started successfully!")
+		fmt.Println()
+	}
+
+	// Create a scanner to read user input
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for {
+		fmt.Print("ELR> ")
+		
+		// Read user input
+		if !scanner.Scan() {
+			break
+		}
+
+		input := strings.TrimSpace(scanner.Text())
+
+		// Skip empty input
+		if input == "" {
+			continue
+		}
+
+		// Parse input into arguments
+		args := parseInput(input)
+
+		if len(args) == 0 {
+			continue
+		}
+
+		// Handle special commands first
+		switch args[0] {
+		case "quit", "exit":
+			fmt.Println("Exiting ELR Interactive Console...")
+			return
+		case "help":
+			printHelp()
+			continue
+		}
+
+		// Save original os.Args
+		originalArgs := os.Args
+
+		// Set new os.Args
+		os.Args = append([]string{"elr"}, args...)
+
+		// Call main function logic
+		// We need to temporarily change the command handling to not exit
+		handleCommand(args)
+
+		// Restore original os.Args
+		os.Args = originalArgs
+
+		fmt.Println()
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+	}
+}
+
+// parseInput parses user input into arguments
+func parseInput(input string) []string {
+	var args []string
+	var currentArg string
+	inQuotes := false
+
+	for _, char := range input {
+		switch char {
+		case ' ':
+			if inQuotes {
+				currentArg += string(char)
+			} else if currentArg != "" {
+				args = append(args, currentArg)
+				currentArg = ""
+			}
+		case '"':
+			inQuotes = !inQuotes
+		default:
+			currentArg += string(char)
+		}
+	}
+
+	if currentArg != "" {
+		args = append(args, currentArg)
+	}
+
+	return args
+}
+
+// handleCommand handles a single command without exiting
+func handleCommand(args []string) {
+	if len(args) == 0 {
+		return
+	}
+
+	command := args[0]
+
+	switch command {
+	case "version":
+		printVersion()
+	case "help":
+		printHelp()
+	case "start":
+		startRuntime()
+	case "stop":
+		stopRuntime()
+	case "exit":
+		exitRuntime()
+	case "create":
+		createContainer()
+	case "run":
+		if len(args) >= 2 && args[1] == "python" {
+			// Temporarily modify args for runPython
+			originalArgs := os.Args
+			os.Args = append([]string{"elr", "run", "python"}, args[2:]...)
+			runPython()
+			os.Args = originalArgs
+		} else {
+			runContainer()
+		}
+	case "install":
+		if len(args) >= 2 && args[1] == "python" {
+			originalArgs := os.Args
+			os.Args = append([]string{"elr", "install", "python"}, args[2:]...)
+			installPython()
+			os.Args = originalArgs
+		} else {
+			fmt.Println("Error: Unknown install command")
+			fmt.Println("Usage: elr install python [version] [path]")
+		}
+	case "start-container":
+		startContainer()
+	case "stop-container":
+		stopContainer()
+	case "list":
+		listContainers()
+	case "delete":
+		deleteContainer()
+	case "inspect":
+		inspectContainer()
+	case "status":
+		checkStatus()
+	case "running-containers":
+		listRunningContainers()
+	case "interact":
+		interactWithModel()
+	case "stop-model":
+		stopModel()
+	case "setup":
+		setupCommand()
+	case "Settings":
+		settingsCommand()
+	case "model":
+		modelCommand()
+	case "sandbox":
+		sandboxCommand()
+	case "api":
+		apiCommand()
+	case "fs":
+		fsCommand()
+	case "admin":
+		adminCommand()
+	case "Upload":
+		uploadCommand()
+	case "project":
+		projectCommand()
+	default:
+		fmt.Printf("Unknown command: %s\n", command)
+		printHelp()
+	}
 }

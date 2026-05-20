@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -74,6 +75,7 @@ type Container struct {
 	// 资源管理
 	ResourceMonitor    *ResourceMonitor `json:"-"`
 	Runtime        *Runtime          `json:"-"`
+	SandboxManagerCmd *exec.Cmd        `json:"-"`
 	Status         ContainerStatus   `json:"status"`
 	Created        time.Time         `json:"created"`
 	Started        *time.Time        `json:"started,omitempty"`
@@ -136,8 +138,18 @@ func (rm *ResourceMonitor) monitor() {
 		select {
 		case <-ticker.C:
 			// In a real implementation, this would collect actual resource usage
-			rm.CPUUsage = float64(rand.Intn(rm.CPULimit))
-			rm.MemoryUsage = uint64(rand.Intn(int(rm.MemoryLimit / 1024 / 1024)) * 1024 * 1024)
+			if rm.CPULimit > 0 {
+				rm.CPUUsage = float64(rand.Intn(rm.CPULimit))
+			} else {
+				rm.CPUUsage = 0
+			}
+			
+			memoryLimitMB := int(rm.MemoryLimit / 1024 / 1024)
+			if memoryLimitMB > 0 {
+				rm.MemoryUsage = uint64(rand.Intn(memoryLimitMB) * 1024 * 1024)
+			} else {
+				rm.MemoryUsage = 0
+			}
 		case <-rm.StopCh:
 			return
 		}
@@ -156,7 +168,10 @@ func parseMemoryLimit(limit string) uint64 {
 
 // Start starts the container
 func (c *Container) Start() error {
-	if c.Status == ContainerStatusRunning {
+	// Check if container is already in runtime container list
+	runtimeContainerList := GetRuntimeContainerList()
+	_, isRunning := runtimeContainerList.GetContainer(c.ID)
+	if isRunning {
 		return fmt.Errorf("container is already running")
 	}
 
@@ -186,6 +201,24 @@ func (c *Container) Start() error {
 		c.saveConfig()
 		return fmt.Errorf(c.Error)
 	}
+
+	// Add container to runtime container list
+	runtimeContainerList = GetRuntimeContainerList()
+	runtimeContainerList.AddContainer(c.ID, c.Name, c.PID)
+
+	// Start sandbox manager in container
+	fmt.Printf("Starting sandbox manager for container: %s\n", c.ID)
+	sandboxManagerCmd, err := StartSandboxManagerInContainer(c.ID, c.Dir)
+	if err != nil {
+		fmt.Printf("Warning: failed to start sandbox manager: %v\n", err)
+	} else {
+		// Store sandbox manager command for later cleanup
+		c.SandboxManagerCmd = sandboxManagerCmd
+		fmt.Printf("Sandbox manager started for container: %s\n", c.ID)
+	}
+
+	// Create sandbox runtime record list for this container
+	// TODO: Implement sandbox runtime record list
 
 	fmt.Printf("Started container: %s (%s) with PID %d\n", c.ID, c.Name, c.PID)
 	return nil
@@ -282,6 +315,13 @@ func (c *Container) Stop() error {
 		c.saveConfig()
 		return fmt.Errorf(c.Error)
 	}
+
+	// Remove container from runtime container list
+	runtimeContainerList := GetRuntimeContainerList()
+	runtimeContainerList.RemoveContainer(c.ID)
+
+	// Remove sandbox runtime records for this container
+	// TODO: Implement sandbox runtime record removal
 
 	fmt.Printf("Stopped container: %s (%s) with exit code %d\n", c.ID, c.Name, c.ExitCode)
 	return nil

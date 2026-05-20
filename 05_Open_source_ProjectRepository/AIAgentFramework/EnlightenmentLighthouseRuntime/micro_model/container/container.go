@@ -33,7 +33,7 @@ func NewContainerManager(config *config.ContainerConfig) (*ContainerManager, err
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		// Docker客户端创建失败，返回一个空的容器管理器
-		fmt.Println("Warning: Failed to create Docker client, container functionality will be limited")
+		fmt.Println("Warning: Failed to create Docker client, using lightweight container manager")
 		return &ContainerManager{
 			config: config,
 			client: nil,
@@ -44,7 +44,7 @@ func NewContainerManager(config *config.ContainerConfig) (*ContainerManager, err
 	_, err = cli.Ping(context.Background())
 	if err != nil {
 		// Docker连接失败，返回一个空的容器管理器
-		fmt.Println("Warning: Failed to connect to Docker, container functionality will be limited")
+		fmt.Println("Warning: Failed to connect to Docker, using lightweight container manager")
 		return &ContainerManager{
 			config: config,
 			client: nil,
@@ -57,13 +57,17 @@ func NewContainerManager(config *config.ContainerConfig) (*ContainerManager, err
 	}, nil
 }
 
+
+
 // CreateContainer 创建容器
 func (c *ContainerManager) CreateContainer(name string, modelID string, resources map[string]interface{}) error {
 	if c.client == nil {
-		// Docker不可用时，使用轻量级模拟
-		fmt.Printf("Docker is not available, using lightweight container simulation for %s\n", name)
-		fmt.Printf("Container %s created successfully (simulated)\n", name)
-		return nil
+		// Docker不可用时，使用轻量级容器管理器
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		return lightweightManager.CreateContainer(name, modelID, resources)
 	}
 	
 	ctx := context.Background()
@@ -108,10 +112,12 @@ func (c *ContainerManager) CreateContainer(name string, modelID string, resource
 // StartContainer 启动容器
 func (c *ContainerManager) StartContainer(name string) error {
 	if c.client == nil {
-		// Docker不可用时，使用轻量级模拟
-		fmt.Printf("Docker is not available, simulating container start for %s\n", name)
-		fmt.Printf("Container %s started successfully (simulated)\n", name)
-		return nil
+		// Docker不可用时，使用轻量级容器管理器
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		return lightweightManager.StartContainer(name)
 	}
 	
 	ctx := context.Background()
@@ -128,10 +134,12 @@ func (c *ContainerManager) StartContainer(name string) error {
 // StopContainer 停止容器
 func (c *ContainerManager) StopContainer(name string) error {
 	if c.client == nil {
-		// Docker不可用时，使用轻量级模拟
-		fmt.Printf("Docker is not available, simulating container stop for %s\n", name)
-		fmt.Printf("Container %s stopped successfully (simulated)\n", name)
-		return nil
+		// Docker不可用时，使用轻量级容器管理器
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		return lightweightManager.StopContainer(name)
 	}
 	
 	ctx := context.Background()
@@ -148,10 +156,12 @@ func (c *ContainerManager) StopContainer(name string) error {
 // RemoveContainer 删除容器
 func (c *ContainerManager) RemoveContainer(name string) error {
 	if c.client == nil {
-		// Docker不可用时，使用轻量级模拟
-		fmt.Printf("Docker is not available, simulating container removal for %s\n", name)
-		fmt.Printf("Container %s removed successfully (simulated)\n", name)
-		return nil
+		// Docker不可用时，使用轻量级容器管理器
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		return lightweightManager.RemoveContainer(name)
 	}
 	
 	ctx := context.Background()
@@ -168,17 +178,12 @@ func (c *ContainerManager) RemoveContainer(name string) error {
 // GetContainer 获取容器信息
 func (c *ContainerManager) GetContainer(name string) (*Container, error) {
 	if c.client == nil {
-		// Docker不可用时，返回模拟的容器信息
-		fmt.Printf("Docker is not available, returning simulated container info for %s\n", name)
-		return &Container{
-			Name:      name,
-			ID:        "simulated-" + name,
-			Image:     "simulated-image",
-			Status:    "running",
-			ModelID:   "elr-chat",
-			CreatedAt: "2026-03-19T00:00:00Z",
-			StartedAt: "2026-03-19T00:00:00Z",
-		}, nil
+		// Docker不可用时，使用轻量级容器管理器
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		return lightweightManager.GetContainer(name)
 	}
 	
 	ctx := context.Background()
@@ -212,7 +217,12 @@ func (c *ContainerManager) GetContainer(name string) (*Container, error) {
 // ListContainers 列出所有容器
 func (c *ContainerManager) ListContainers() ([]*Container, error) {
 	if c.client == nil {
-		return []*Container{}, nil // 返回空列表而不是错误
+		// Docker不可用时，使用轻量级容器管理器
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		return lightweightManager.ListContainers()
 	}
 	
 	ctx := context.Background()
@@ -241,6 +251,15 @@ func (c *ContainerManager) Cleanup() error {
 	if c.client != nil {
 		if err := c.client.Close(); err != nil {
 			return fmt.Errorf("failed to close Docker client: %v", err)
+		}
+	} else {
+		// Docker不可用时，使用轻量级容器管理器进行清理
+		lightweightManager, err := NewLightweightContainerManager(c.config)
+		if err != nil {
+			return fmt.Errorf("failed to create lightweight container manager: %v", err)
+		}
+		if err := lightweightManager.Cleanup(); err != nil {
+			return fmt.Errorf("failed to cleanup lightweight container manager: %v", err)
 		}
 	}
 

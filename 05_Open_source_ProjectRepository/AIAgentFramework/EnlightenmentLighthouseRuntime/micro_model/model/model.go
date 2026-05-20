@@ -9,7 +9,22 @@ import (
 	"sync"
 	"time"
 	"micro_model/config"
+	"gopkg.in/yaml.v3"
 )
+
+// ELRConfig ELR 配置结构体
+type ELRConfig struct {
+	Resources struct {
+		Types map[string]struct {
+			Enable bool   `yaml:"enable"`
+			Dir    string `yaml:"dir"`
+		} `yaml:"types"`
+		ModelTypes map[string]struct {
+			Enable bool   `yaml:"enable"`
+			Dir    string `yaml:"dir"`
+		} `yaml:"model_types"`
+	} `yaml:"resources"`
+}
 
 // ModelManager 模型管理器
 type ModelManager struct {
@@ -41,6 +56,98 @@ type LoadedModel struct {
 	IsActive     bool
 }
 
+// loadConfig 加载 ELR 配置
+func loadConfig() (*ELRConfig, error) {
+	configPath := os.Getenv("ELR_CONFIG")
+	if configPath == "" {
+		configPath = "~/.elr/config.yaml"
+	}
+
+	// 扩展 ~ 为 home 目录
+	if len(configPath) > 0 && configPath[0] == '~' {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get home directory: %v", err)
+		}
+		configPath = homeDir + configPath[1:]
+	}
+
+	// 检查配置文件是否存在
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		// 返回默认配置
+		return defaultConfig(), nil
+	}
+
+	// 读取配置文件
+	configBytes, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %v", err)
+	}
+
+	// 解析配置
+	config := &ELRConfig{}
+	if err := yaml.Unmarshal(configBytes, config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %v", err)
+	}
+
+	return config, nil
+}
+
+// defaultConfig 返回默认配置
+func defaultConfig() *ELRConfig {
+	return &ELRConfig{
+		Resources: struct {
+			Types map[string]struct {
+				Enable bool   `yaml:"enable"`
+				Dir    string `yaml:"dir"`
+			} `yaml:"types"`
+			ModelTypes map[string]struct {
+				Enable bool   `yaml:"enable"`
+				Dir    string `yaml:"dir"`
+			} `yaml:"model_types"`
+		}{
+			Types: map[string]struct {
+				Enable bool   `yaml:"enable"`
+				Dir    string `yaml:"dir"`
+			}{
+				"component": {
+					Enable: true,
+					Dir:    "~/.elr/resources/components",
+				},
+				"model": {
+					Enable: true,
+					Dir:    "~/.elr/resources/models",
+				},
+				"project": {
+					Enable: true,
+					Dir:    "~/.elr/resources/projects",
+				},
+			},
+			ModelTypes: map[string]struct {
+				Enable bool   `yaml:"enable"`
+				Dir    string `yaml:"dir"`
+			}{
+				"text": {
+					Enable: true,
+					Dir:    "~/.elr/resources/models/text",
+				},
+				"image": {
+					Enable: true,
+					Dir:    "~/.elr/resources/models/image",
+				},
+				"audio": {
+					Enable: true,
+					Dir:    "~/.elr/resources/models/audio",
+				},
+				"video": {
+					Enable: true,
+					Dir:    "~/.elr/resources/models/video",
+				},
+			},
+		},
+	}
+}
+
 // NewModelManager 创建模型管理器
 func NewModelManager(config *config.Config) (*ModelManager, error) {
 	// 确保模型目录存在
@@ -56,48 +163,136 @@ func NewModelManager(config *config.Config) (*ModelManager, error) {
 
 // GetModel 获取模型信息
 func (m *ModelManager) GetModel(modelID string) (*Model, error) {
+	// 首先尝试在当前模型目录中查找
 	modelPath := filepath.Join(m.config.Model.ModelDir, modelID)
+	if _, err := os.Stat(modelPath); err == nil {
+		// 加载模型属性
+		properties, err := LoadModelProperties(modelPath)
+		if err != nil {
+			fmt.Printf("Warning: Failed to load model properties: %v\n", err)
+			// 继续执行，使用默认值
+		}
 
-	// 检查模型目录是否存在
-	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("model %s not found", modelID)
+		// 从模型属性中获取信息，或使用默认值
+		modelType := "unknown"
+		modelName := modelID
+		modelVersion := "1.0.0"
+
+		if properties != nil {
+			if properties.Type != "" {
+				modelType = properties.Type
+			}
+			if properties.ModelName != "" {
+				modelName = properties.ModelName
+			}
+			if properties.Version != "" {
+				modelVersion = properties.Version
+			}
+		}
+
+		// 返回模型信息
+		return &Model{
+			ID:          modelID,
+			Type:        modelType,
+			Name:        modelName,
+			Version:     modelVersion,
+			Path:        modelPath,
+			Properties:  properties,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, nil
 	}
 
-	// 加载模型属性
-	properties, err := LoadModelProperties(modelPath)
-	if err != nil {
-		fmt.Printf("Warning: Failed to load model properties: %v\n", err)
-		// 继续执行，使用默认值
+	// 如果在当前模型目录中没有找到，尝试从 ELR Settings 中获取所有模型类型目录
+	elrConfig, err := loadConfig()
+	if err == nil {
+		// 尝试在所有模型类型目录中查找
+		for modelType, modelConfig := range elrConfig.Resources.ModelTypes {
+			if modelConfig.Enable && modelConfig.Dir != "" {
+				modelPath := filepath.Join(modelConfig.Dir, modelID)
+				if _, err := os.Stat(modelPath); err == nil {
+					// 加载模型属性
+					properties, err := LoadModelProperties(modelPath)
+					if err != nil {
+						fmt.Printf("Warning: Failed to load model properties: %v\n", err)
+						// 继续执行，使用默认值
+					}
+
+					// 从模型属性中获取信息，或使用默认值
+					modelName := modelID
+					modelVersion := "1.0.0"
+
+					if properties != nil {
+						if properties.ModelName != "" {
+							modelName = properties.ModelName
+						}
+						if properties.Version != "" {
+							modelVersion = properties.Version
+						}
+					}
+
+					// 返回模型信息
+					return &Model{
+						ID:          modelID,
+						Type:        modelType,
+						Name:        modelName,
+						Version:     modelVersion,
+						Path:        modelPath,
+						Properties:  properties,
+						CreatedAt:   time.Now(),
+						UpdatedAt:   time.Now(),
+					}, nil
+				}
+			}
+		}
+
+		// 尝试在所有资源类型目录中查找
+		for _, resourceConfig := range elrConfig.Resources.Types {
+			if resourceConfig.Enable && resourceConfig.Dir != "" {
+				modelPath := filepath.Join(resourceConfig.Dir, modelID)
+				if _, err := os.Stat(modelPath); err == nil {
+					// 加载模型属性
+					properties, err := LoadModelProperties(modelPath)
+					if err != nil {
+						fmt.Printf("Warning: Failed to load model properties: %v\n", err)
+						// 继续执行，使用默认值
+					}
+
+					// 从模型属性中获取信息，或使用默认值
+					modelType := "unknown"
+					modelName := modelID
+					modelVersion := "1.0.0"
+
+					if properties != nil {
+						if properties.Type != "" {
+							modelType = properties.Type
+						}
+						if properties.ModelName != "" {
+							modelName = properties.ModelName
+						}
+						if properties.Version != "" {
+							modelVersion = properties.Version
+						}
+					}
+
+					// 返回模型信息
+					return &Model{
+						ID:          modelID,
+						Type:        modelType,
+						Name:        modelName,
+						Version:     modelVersion,
+						Path:        modelPath,
+						Properties:  properties,
+						CreatedAt:   time.Now(),
+						UpdatedAt:   time.Now(),
+					}, nil
+				}
+			}
+		}
 	}
 
-	// 从模型属性中获取信息，或使用默认值
-	modelType := "unknown"
-	modelName := modelID
-	modelVersion := "1.0.0"
-
-	if properties != nil {
-		if properties.Type != "" {
-			modelType = properties.Type
-		}
-		if properties.ModelName != "" {
-			modelName = properties.ModelName
-		}
-		if properties.Version != "" {
-			modelVersion = properties.Version
-		}
-	}
-
-	// 返回模型信息
-	return &Model{
-		ID:          modelID,
-		Type:        modelType,
-		Name:        modelName,
-		Version:     modelVersion,
-		Path:        modelPath,
-		Properties:  properties,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}, nil
+	// 如果都没有找到，返回错误
+	return nil, fmt.Errorf("model %s not found", modelID)
 }
 
 // ListModels 列出所有模型
@@ -163,9 +358,17 @@ func (m *ModelManager) DownloadModel(modelID string, modelType string, downloadU
 
 // DeleteModel 删除模型
 func (m *ModelManager) DeleteModel(modelID string) error {
-	modelPath := filepath.Join(m.config.Model.ModelDir, modelID)
+	// 检查模型是否正在运行
+	m.modelMutex.Lock()
+	if _, exists := m.loadedModels[modelID]; exists {
+		// 模型正在运行，先卸载
+		delete(m.loadedModels, modelID)
+		fmt.Printf("Stopped running model: %s\n", modelID)
+	}
+	m.modelMutex.Unlock()
 
 	// 检查模型目录是否存在
+	modelPath := filepath.Join(m.config.Model.ModelDir, modelID)
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		return fmt.Errorf("model %s not found", modelID)
 	}
@@ -192,9 +395,38 @@ func (m *ModelManager) UpdateModel(modelID string, downloadURL string) error {
 
 // Exists 检查模型是否存在
 func (m *ModelManager) Exists(modelID string) bool {
+	// 首先尝试在当前模型目录中查找
 	modelPath := filepath.Join(m.config.Model.ModelDir, modelID)
-	_, err := os.Stat(modelPath)
-	return !os.IsNotExist(err)
+	if _, err := os.Stat(modelPath); err == nil {
+		return true
+	}
+
+	// 如果在当前模型目录中没有找到，尝试从 ELR Settings 中获取所有模型类型目录
+	elrConfig, err := loadConfig()
+	if err == nil {
+		// 尝试在所有模型类型目录中查找
+		for _, modelConfig := range elrConfig.Resources.ModelTypes {
+			if modelConfig.Enable && modelConfig.Dir != "" {
+				modelPath := filepath.Join(modelConfig.Dir, modelID)
+				if _, err := os.Stat(modelPath); err == nil {
+					return true
+				}
+			}
+		}
+
+		// 尝试在所有资源类型目录中查找
+		for _, resourceConfig := range elrConfig.Resources.Types {
+			if resourceConfig.Enable && resourceConfig.Dir != "" {
+				modelPath := filepath.Join(resourceConfig.Dir, modelID)
+				if _, err := os.Stat(modelPath); err == nil {
+					return true
+				}
+			}
+		}
+	}
+
+	// 如果都没有找到，返回 false
+	return false
 }
 
 // LoadModel 加载模型
@@ -355,7 +587,7 @@ func (m *ModelManager) GetModelAdapter(modelID string) (*ModelAdapter, error) {
 	}
 
 	// 创建模型适配器
-	adapter := NewModelAdapter(model.Properties)
+	adapter := NewModelAdapter(model.Properties, model)
 
 	return adapter, nil
 }

@@ -3,6 +3,7 @@ package sandbox
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -10,7 +11,19 @@ import (
 
 	"micro_model/config"
 	"micro_model/model"
+	"micro_model/project"
 )
+
+// Project 沙箱中的项目信息
+type Project struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Type        string    `json:"type"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"` // running, stopped, error
+	Resources   Resources `json:"resources"`
+	DeployedAt  time.Time `json:"deployed_at"`
+}
 
 // Sandbox 沙箱实例
 type Sandbox struct {
@@ -21,6 +34,7 @@ type Sandbox struct {
 	StartedAt    *time.Time        `json:"started_at,omitempty"`
 	StoppedAt    *time.Time        `json:"stopped_at,omitempty"`
 	Models       map[string]*Model `json:"models"` // 模型ID -> 模型信息
+	Projects     map[string]*Project `json:"projects"` // 项目ID -> 项目信息
 	Resources    Resources         `json:"resources"`
 }
 
@@ -56,6 +70,7 @@ type SandboxManager struct {
 	config   *config.Config
 	sandboxes map[string]*Sandbox // 沙箱ID -> 沙箱实例
 	modelManager *model.ModelManager
+	projectManager *project.ProjectManager
 	mutex    sync.RWMutex
 	storagePath string // 沙箱信息持久化路径
 }
@@ -65,11 +80,15 @@ func NewSandboxManager(config *config.Config, modelManager *model.ModelManager) 
 	// 设置存储路径
 	storagePath := "./sandbox-state.json"
 	
+	// 创建项目管理器
+	projectManager := project.NewProjectManager(config)
+	
 	// 创建沙箱管理器
 	manager := &SandboxManager{
 		config:   config,
 		sandboxes: make(map[string]*Sandbox),
 		modelManager: modelManager,
+		projectManager: projectManager,
 		storagePath: storagePath,
 	}
 	
@@ -176,6 +195,7 @@ func (sm *SandboxManager) CreateSandbox(containerName string) (*Sandbox, error) 
 		Status:    "created",
 		CreatedAt: time.Now(),
 		Models:    make(map[string]*Model),
+		Projects:  make(map[string]*Project),
 		Resources: Resources{
 			CPU:    0,
 			Memory: 0,
@@ -243,6 +263,18 @@ func (sm *SandboxManager) StartSandbox(sandboxID string) error {
 			return
 		}
 
+		// 检查 ELR 运行时是否正在运行
+		if !isELRRunning() {
+			errCh <- fmt.Errorf("ELR runtime is not running, cannot start sandbox")
+			return
+		}
+
+		// 检查容器是否在运行时容器列表中
+		if !isContainerRunning(sandbox.Container) {
+			errCh <- fmt.Errorf("container %s is not running in ELR runtime, cannot start sandbox", sandbox.Container)
+			return
+		}
+
 		// 启动沙箱
 		startTime := time.Now()
 		sandbox.StartedAt = &startTime
@@ -269,25 +301,58 @@ func (sm *SandboxManager) StopSandbox(sandboxID string) error {
 
 	// Start operation in a goroutine
 	go func() {
+		// 先获取沙箱信息和需要卸载的模型/项目
 		sm.mutex.Lock()
-		defer sm.mutex.Unlock()
-
 		sandbox, exists := sm.sandboxes[sandboxID]
 		if !exists {
+			sm.mutex.Unlock()
 			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
 			return
 		}
 
 		if sandbox.Status != "running" {
+			sm.mutex.Unlock()
 			errCh <- fmt.Errorf("sandbox %s is not running", sandboxID)
 			return
 		}
 
-		// 停止沙箱中的所有模型
+		// 收集需要卸载的模型和项目
+		var modelIDs []string
 		for modelID := range sandbox.Models {
+			modelIDs = append(modelIDs, modelID)
+		}
+
+		var projectIDs []string
+		for projectID := range sandbox.Projects {
+			projectIDs = append(projectIDs, projectID)
+		}
+
+		// 释放锁
+		sm.mutex.Unlock()
+
+		// 卸载所有模型
+		for _, modelID := range modelIDs {
 			if err := sm.UnloadModel(sandboxID, modelID); err != nil {
 				fmt.Printf("Error unloading model %s: %v\n", modelID, err)
 			}
+		}
+
+		// 停止所有项目
+		for _, projectID := range projectIDs {
+			if err := sm.StopProject(sandboxID, projectID); err != nil {
+				fmt.Printf("Error stopping project %s: %v\n", projectID, err)
+			}
+		}
+
+		// 再次获取锁，更新沙箱状态
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
+
+		// 再次检查沙箱是否存在
+		sandbox, exists = sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
 		}
 
 		// 停止沙箱
@@ -624,6 +689,264 @@ func (sm *SandboxManager) GetModels(sandboxID string) ([]*Model, error) {
 	return models, nil
 }
 
+// LoadProject 加载项目到沙箱
+func (sm *SandboxManager) LoadProject(sandboxID string, projectID string) error {
+	// Create channel to receive result
+	errCh := make(chan error)
+
+	// Start operation in a goroutine
+	go func() {
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
+
+		// 检查沙箱是否存在
+		sandbox, exists := sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
+		}
+
+		// 检查沙箱是否运行中
+		if sandbox.Status != "running" {
+			errCh <- fmt.Errorf("sandbox %s is not running", sandboxID)
+			return
+		}
+
+		// 检查项目是否已加载
+		if _, exists := sandbox.Projects[projectID]; exists {
+			errCh <- fmt.Errorf("project %s is already loaded in sandbox %s", projectID, sandboxID)
+			return
+		}
+
+		// 部署项目
+		if err := sm.projectManager.DeployProject(projectID, sandboxID); err != nil {
+			errCh <- fmt.Errorf("failed to deploy project: %v", err)
+			return
+		}
+
+		// 获取项目信息
+		projectInfo, err := sm.projectManager.GetProject(projectID)
+		if err != nil {
+			errCh <- fmt.Errorf("failed to get project info: %v", err)
+			return
+		}
+
+		// 创建项目实例
+		project := &Project{
+			ID:          projectID,
+			Name:        projectInfo.Name,
+			Type:        string(projectInfo.Type),
+			Description: projectInfo.Description,
+			Status:      "deployed",
+			Resources: Resources{
+				CPU:    0.1,  // 模拟值
+				Memory: 100 * 1024 * 1024, // 100MB
+				Disk:   50 * 1024 * 1024,  // 50MB
+			},
+			DeployedAt: time.Now(),
+		}
+
+		// 加载项目到沙箱
+		sandbox.Projects[projectID] = project
+
+		// 更新沙箱资源使用情况
+		sandbox.Resources.CPU += project.Resources.CPU
+		sandbox.Resources.Memory += project.Resources.Memory
+		sandbox.Resources.Disk += project.Resources.Disk
+
+		fmt.Printf("Loaded project %s into sandbox %s\n", projectID, sandboxID)
+
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+
+		errCh <- nil
+	}()
+
+	// Wait for operation to complete
+	return <-errCh
+}
+
+// UnloadProject 从沙箱卸载项目
+func (sm *SandboxManager) UnloadProject(sandboxID string, projectID string) error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+
+	// 检查沙箱是否存在
+	sandbox, exists := sm.sandboxes[sandboxID]
+	if !exists {
+		return fmt.Errorf("sandbox %s not found", sandboxID)
+	}
+
+	// 检查项目是否已加载
+	project, exists := sandbox.Projects[projectID]
+	if !exists {
+		return fmt.Errorf("project %s is not loaded in sandbox %s", projectID, sandboxID)
+	}
+
+	// 卸载项目
+	if err := sm.projectManager.UndeployProject(projectID, sandboxID); err != nil {
+		return fmt.Errorf("failed to undeploy project: %v", err)
+	}
+
+	// 从沙箱卸载项目
+	delete(sandbox.Projects, projectID)
+
+	// 更新沙箱资源使用情况
+	sandbox.Resources.CPU -= project.Resources.CPU
+	sandbox.Resources.Memory -= project.Resources.Memory
+	sandbox.Resources.Disk -= project.Resources.Disk
+
+	fmt.Printf("Unloaded project %s from sandbox %s\n", projectID, sandboxID)
+
+	// 保存沙箱信息到磁盘
+	if err := sm.saveSandboxes(true); err != nil {
+		fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+	}
+
+	return nil
+}
+
+// StartProject 启动项目
+func (sm *SandboxManager) StartProject(sandboxID string, projectID string) error {
+	// Create channel to receive result
+	errCh := make(chan error)
+
+	// Start operation in a goroutine
+	go func() {
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
+
+		// 检查沙箱是否存在
+		sandbox, exists := sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
+		}
+
+		// 检查沙箱是否运行中
+		if sandbox.Status != "running" {
+			errCh <- fmt.Errorf("sandbox %s is not running", sandboxID)
+			return
+		}
+
+		// 检查项目是否已加载
+		project, exists := sandbox.Projects[projectID]
+		if !exists {
+			errCh <- fmt.Errorf("project %s is not loaded in sandbox %s", projectID, sandboxID)
+			return
+		}
+
+		// 启动项目
+		if err := sm.projectManager.StartProject(projectID, sandboxID); err != nil {
+			errCh <- fmt.Errorf("failed to start project: %v", err)
+			return
+		}
+
+		// 更新项目状态
+		project.Status = "running"
+
+		fmt.Printf("Started project %s in sandbox %s\n", projectID, sandboxID)
+
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+
+		errCh <- nil
+	}()
+
+	// Wait for operation to complete
+	return <-errCh
+}
+
+// StopProject 停止项目
+func (sm *SandboxManager) StopProject(sandboxID string, projectID string) error {
+	// Create channel to receive result
+	errCh := make(chan error)
+
+	// Start operation in a goroutine
+	go func() {
+		sm.mutex.Lock()
+		defer sm.mutex.Unlock()
+
+		// 检查沙箱是否存在
+		sandbox, exists := sm.sandboxes[sandboxID]
+		if !exists {
+			errCh <- fmt.Errorf("sandbox %s not found", sandboxID)
+			return
+		}
+
+		// 检查项目是否已加载
+		project, exists := sandbox.Projects[projectID]
+		if !exists {
+			errCh <- fmt.Errorf("project %s is not loaded in sandbox %s", projectID, sandboxID)
+			return
+		}
+
+		// 停止项目
+		if err := sm.projectManager.StopProject(projectID, sandboxID); err != nil {
+			errCh <- fmt.Errorf("failed to stop project: %v", err)
+			return
+		}
+
+		// 更新项目状态
+		project.Status = "stopped"
+
+		fmt.Printf("Stopped project %s in sandbox %s\n", projectID, sandboxID)
+
+		// 保存沙箱信息到磁盘
+		if err := sm.saveSandboxes(true); err != nil {
+			fmt.Printf("Warning: failed to save sandboxes: %v\n", err)
+		}
+
+		errCh <- nil
+	}()
+
+	// Wait for operation to complete
+	return <-errCh
+}
+
+// GetProjectStatus 获取项目状态
+func (sm *SandboxManager) GetProjectStatus(sandboxID string, projectID string) (string, error) {
+	sm.mutex.RLock()
+	defer sm.mutex.RUnlock()
+
+	// 检查沙箱是否存在
+	sandbox, exists := sm.sandboxes[sandboxID]
+	if !exists {
+		return "", fmt.Errorf("sandbox %s not found", sandboxID)
+	}
+
+	// 检查项目是否已加载
+	project, exists := sandbox.Projects[projectID]
+	if !exists {
+		return "", fmt.Errorf("project %s is not loaded in sandbox %s", projectID, sandboxID)
+	}
+
+	return project.Status, nil
+}
+
+// ListProjects 列出沙箱中的项目
+func (sm *SandboxManager) ListProjects(sandboxID string) ([]*Project, error) {
+	sm.mutex.RLock()
+	defer sm.mutex.RUnlock()
+
+	// 检查沙箱是否存在
+	sandbox, exists := sm.sandboxes[sandboxID]
+	if !exists {
+		return nil, fmt.Errorf("sandbox %s not found", sandboxID)
+	}
+
+	projects := make([]*Project, 0, len(sandbox.Projects))
+	for _, project := range sandbox.Projects {
+		projects = append(projects, project)
+	}
+
+	return projects, nil
+}
+
 // RunModel 运行模型
 func (sm *SandboxManager) RunModel(sandboxID string, modelID string, input string) (string, error) {
 	sm.mutex.RLock()
@@ -850,4 +1173,49 @@ func (sr *SandboxRuntime) StopAllSandboxes() error {
 // GetSandboxManager 获取沙箱管理器
 func (sr *SandboxRuntime) GetSandboxManager() *SandboxManager {
 	return sr.manager
+}
+
+// GetProjectManager 获取项目管理器
+func (sm *SandboxManager) GetProjectManager() *project.ProjectManager {
+	return sm.projectManager
+}
+
+// isELRRunning 检查 ELR 运行时是否正在运行
+func isELRRunning() bool {
+	// Try to connect to ELR API on port 16888
+	resp, err := http.Get("http://localhost:16888/api/container/list")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// isContainerRunning 检查容器是否在运行时容器列表中
+func isContainerRunning(containerID string) bool {
+	// Try to get running containers from ELR API
+	resp, err := http.Get("http://localhost:16888/api/container/running")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	// Decode response
+	var runningContainers []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&runningContainers); err != nil {
+		return false
+	}
+
+	// Check if container is in running list
+	for _, container := range runningContainers {
+		if id, ok := container["id"].(string); ok && id == containerID {
+			return true
+		}
+	}
+
+	return false
 }

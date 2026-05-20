@@ -19,17 +19,19 @@ import (
 
 // Runtime represents the core runtime of ELR
 type Runtime struct {
-	Config         *Config
-	Platform       Platform
-	Containers     map[string]*Container
-	ContainerMutex sync.RWMutex
-	Plugins        map[string]Plugin
-	PluginMutex    sync.RWMutex
-	NetworkManager *NetworkManager
-	TokenManager   *TokenManager
-	AdminManager   *AdminManager
-	Stopped        bool
-	StopCh         chan struct{}
+	Config             *Config
+	Platform           Platform
+	Containers         map[string]*Container
+	RunningSandboxes   map[string]interface{}
+	ContainerMutex     sync.RWMutex
+	RunningSandboxMutex   sync.RWMutex
+	Plugins            map[string]Plugin
+	PluginMutex        sync.RWMutex
+	NetworkManager     *NetworkManager
+	TokenManager       *TokenManager
+	AdminManager       *AdminManager
+	Stopped            bool
+	StopCh             chan struct{}
 }
 
 // Config represents the runtime configuration
@@ -1097,7 +1099,7 @@ func NewRuntime(config *Config) (*Runtime, error) {
 		config.Network.APIPorts.DesktopAPI = 8081
 	}
 	if config.Network.APIPorts.PublicAPI == 0 {
-		config.Network.APIPorts.PublicAPI = 8080
+		config.Network.APIPorts.PublicAPI = 16888
 	}
 	if config.Network.APIPorts.ModelAPI == 0 {
 		config.Network.APIPorts.ModelAPI = 8082
@@ -1125,11 +1127,12 @@ func NewRuntime(config *Config) (*Runtime, error) {
 
 	// Create runtime
 	runtime := &Runtime{
-		Config:     config,
-		Platform:   platform,
-		Containers: make(map[string]*Container),
-		Plugins:    make(map[string]Plugin),
-		StopCh:     make(chan struct{}),
+		Config:             config,
+		Platform:           platform,
+		Containers:         make(map[string]*Container),
+		RunningSandboxes:   make(map[string]interface{}),
+		Plugins:            make(map[string]Plugin),
+		StopCh:             make(chan struct{}),
 	}
 
 	// Create network manager with public API port
@@ -1149,6 +1152,9 @@ func NewRuntime(config *Config) (*Runtime, error) {
 		fmt.Printf("Warning: failed to load admins: %v\n", err)
 	}
 
+	// Initialize sandbox-container mapping manager
+	InitSandboxContainerManager(config.DataDir)
+
 	// Load plugins
 	if err := runtime.loadPlugins(); err != nil {
 		return nil, fmt.Errorf("failed to load plugins: %v", err)
@@ -1158,7 +1164,7 @@ func NewRuntime(config *Config) (*Runtime, error) {
 }
 
 // Start starts the runtime
-func (r *Runtime) Start() error {
+func (r *Runtime) Start(autoStartItems ...bool) error {
 	fmt.Printf("Starting Enlightenment Lighthouse Runtime v%s\n", Version)
 	fmt.Printf("Platform: %s %s\n", r.Platform.Name(), r.Platform.Version())
 	fmt.Printf("Data directory: %s\n", r.Config.DataDir)
@@ -1190,7 +1196,71 @@ func (r *Runtime) Start() error {
 		fmt.Println("Network service is disabled. Use 'elr network enable' to enable it.")
 	}
 
-	fmt.Println("Enlightenment Lighthouse Runtime started successfully!")
+	// Check if we need to auto start containers, sandboxes, models
+	autoStart := true
+	if len(autoStartItems) > 0 {
+		autoStart = autoStartItems[0]
+	}
+
+	if autoStart {
+		// Check for items that need to be started
+		fmt.Println("\nChecking for items that need to be started...")
+
+		// Restore running containers
+		r.ContainerMutex.Lock()
+		containers := make([]*Container, 0, len(r.Containers))
+		for _, container := range r.Containers {
+			containers = append(containers, container)
+		}
+		r.ContainerMutex.Unlock()
+
+		if len(containers) > 0 {
+			fmt.Printf("Found %d containers\n", len(containers))
+			
+			for i, container := range containers {
+				fmt.Printf("\n=== Starting container %d/%d ===\n", i+1, len(containers))
+				fmt.Printf("Container: %s (%s)\n", container.ID, container.Name)
+				
+				// Check if container is in running state
+				runtimeContainerList := GetRuntimeContainerList()
+				_, isRunning := runtimeContainerList.GetContainer(container.ID)
+				
+				if container.Status == ContainerStatusRunning && !isRunning {
+					fmt.Printf("Status: Running (restoring)\n")
+					
+					// Simulate progress bar
+					fmt.Print("Starting container... ")
+					for j := 0; j < 10; j++ {
+						fmt.Print("=")
+						time.Sleep(100 * time.Millisecond)
+					}
+					fmt.Println(">")
+					
+					if err := container.Start(); err != nil {
+						fmt.Printf("Warning: failed to restore container %s: %v\n", container.ID, err)
+					} else {
+						fmt.Printf("Container %s started successfully!\n", container.Name)
+						
+						// Check for sandboxes in this container
+						fmt.Println("Checking for sandboxes in container...")
+						
+						// TODO: Implement sandbox checking and starting
+						// This would involve loading the sandbox manager and checking for sandboxes
+						// associated with this container, then starting them if needed
+						
+						// For now, just simulate sandbox startup
+						fmt.Println("No sandboxes found in container or sandbox startup not implemented yet.")
+					}
+				} else {
+					fmt.Printf("Status: %s (not starting)\n", container.Status)
+				}
+			}
+		} else {
+			fmt.Println("No containers found.")
+		}
+	}
+
+	fmt.Println("\nEnlightenment Lighthouse Runtime started successfully!")
 	return nil
 }
 
@@ -1237,6 +1307,14 @@ func (r *Runtime) Stop() error {
 	if err := r.Platform.Cleanup(); err != nil {
 		fmt.Printf("Warning: failed to cleanup platform: %v\n", err)
 	}
+
+	// Clear runtime container list and sandboxes list
+	runtimeContainerList := GetRuntimeContainerList()
+	runtimeContainerList.Clear()
+
+	r.RunningSandboxMutex.Lock()
+	clear(r.RunningSandboxes)
+	r.RunningSandboxMutex.Unlock()
 
 	fmt.Println("Enlightenment Lighthouse Runtime stopped successfully!")
 	return nil
@@ -1469,6 +1547,11 @@ func (r *Runtime) loadContainers() error {
 	}
 
 	return nil
+}
+
+// LoadContainers loads existing containers from the data directory (public method)
+func (r *Runtime) LoadContainers() error {
+	return r.loadContainers()
 }
 
 // Version represents the runtime version

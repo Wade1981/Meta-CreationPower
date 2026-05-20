@@ -88,7 +88,10 @@
       "error": "Error: ELR script does not exist!",
       "failedStatus": "Failed to get network status: {0}",
       "failedStart": "Failed to start services: {0}",
-      "failedStop": "Failed to stop services: {0}"
+      "failedStop": "Failed to stop services: {0}",
+      "elrAlreadyRunning": "ELR is already running!",
+      "elrStarted": "Enlightenment Lighthouse Runtime started! Command port: {port}, you can now start or stop containers.",
+      "elrLightweightStarted": "ELR lightweight container started! Command port: {port}, you can now start or stop containers."
     }
   },
   "zh": {
@@ -180,7 +183,10 @@
       "error": "错误：ELR 脚本不存在！",
       "failedStatus": "获取网络状态失败: {0}",
       "failedStart": "启动服务失败: {0}",
-      "failedStop": "停止服务失败: {0}"
+      "failedStop": "停止服务失败: {0}",
+      "elrAlreadyRunning": "ELR 已经启动！",
+      "elrStarted": "Enlightenment Lighthouse Runtime 已启动！命令端口: {port}，您现在可以启动或停止容器。",
+      "elrLightweightStarted": "ELR 轻量级容器已启动！命令端口: {port}，您现在可以启动或停止容器。"
     }
   }
 }
