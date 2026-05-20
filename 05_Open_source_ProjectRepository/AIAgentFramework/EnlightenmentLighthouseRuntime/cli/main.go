@@ -829,7 +829,7 @@ func defaultConfig() *elr.Config {
 				ModelAPI   int `yaml:"model_api"`
 			} `yaml:"api_ports"`
 		}{
-			Enable:  false, // 默认禁用网络
+			Enable:  true, // 默认启用网络服务
 			Bridge:  "elr0",
 			Subnet:  "172.16.0.0/16",
 			APIPorts: struct {
