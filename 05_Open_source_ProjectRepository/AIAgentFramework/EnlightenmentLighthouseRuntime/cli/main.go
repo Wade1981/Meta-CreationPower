@@ -838,7 +838,7 @@ func defaultConfig() *elr.Config {
 				ModelAPI   int `yaml:"model_api"`
 			}{
 				DesktopAPI: 8081,
-				PublicAPI:  8080,
+				PublicAPI:  16888,
 				ModelAPI:   8082,
 			},
 		},
