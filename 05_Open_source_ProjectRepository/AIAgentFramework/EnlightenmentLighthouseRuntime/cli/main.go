@@ -614,11 +614,12 @@ func printHelp() {
 	fmt.Println("Commands:")
 	fmt.Println("  version           Print version information")
 	fmt.Println("  help              Print this help message")
-	fmt.Println("  start             Start the ELR runtime")
+	fmt.Println("  start [--data-dir <path>]  Start the ELR runtime (optional: specify data directory)")
 	fmt.Println("  stop              Stop the ELR runtime")
 	fmt.Println("  console           Start interactive console mode")
 	fmt.Println("  interactive       Start interactive console mode (alias for console)")
-	fmt.Println("  create            Create a new container")
+	fmt.Println("  create <name> [image]     Create a new container (shorthand)")
+	fmt.Println("  create --name <name> --image <image>  Create a new container (full options)")
 	fmt.Println("  run               Create and start a new container")
 	fmt.Println("  start-container   Start a container")
 	fmt.Println("  stop-container    Stop a container")
@@ -685,6 +686,7 @@ func printHelp() {
 	fmt.Println("  install python [version] [path] - Install Python")
 	fmt.Println()
 	fmt.Println("Options:")
+	fmt.Println("  --data-dir        Data directory path (for start command)")
 	fmt.Println("  --name            Container name")
 	fmt.Println("  --image           Container image")
 	fmt.Println("  --command         Command to run")
@@ -771,8 +773,8 @@ func loadConfig() (*elr.Config, error) {
 func defaultConfig() *elr.Config {
 	return &elr.Config{
 		LogLevel:  "info",
-		DataDir:   "~/.elr/data",
-		PluginDir: "~/.elr/plugins",
+		DataDir:   "./data",
+		PluginDir: "./plugins",
 		FileDirectories: make(map[string]string),
 		PythonVersions: make(map[string]string),
 		Platform: struct {
@@ -962,37 +964,36 @@ func isELRRunning() bool {
 
 // startRuntime starts the ELR runtime
 func startRuntime() {
-	// 检查是否是后台运行模式
 	isBackground := false
+	dataDir := ""
+	
 	for i := 2; i < len(os.Args); i++ {
 		if os.Args[i] == "--background" {
 			isBackground = true
-			break
+		} else if os.Args[i] == "--data-dir" && i+1 < len(os.Args) {
+			dataDir = os.Args[i+1]
 		}
 	}
 
 	if isBackground {
-		// 后台模式：启动 ELR 运行时
-		startRuntimeBackground()
+		startRuntimeBackground(dataDir)
 	} else {
-		// 前台模式：启动后台进程
-		// Check if ELR is already running
 		if isELRRunning() {
 			fmt.Println("ELR 轻量级容器已启动！命令端口: 8080，您现在可以启动或停止容器。")
 			return
 		}
 
-		// 获取当前可执行文件路径
 		execPath, err := os.Executable()
 		if err != nil {
 			fmt.Printf("Error getting executable path: %v\n", err)
 			return
 		}
 
-		// 构建后台命令参数
 		args := []string{"start", "--background"}
+		if dataDir != "" {
+			args = append(args, "--data-dir", dataDir)
+		}
 
-		// 启动后台进程
 		cmd := exec.Command(execPath, args...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			HideWindow:    true,
@@ -1005,15 +1006,21 @@ func startRuntime() {
 			return
 		}
 
-		// 等待后台进程启动
 		time.Sleep(3 * time.Second)
 
 		fmt.Println("ELR 轻量级容器已启动！命令端口: 16888，您现在可以启动或停止容器。")
+		if dataDir != "" {
+			fmt.Printf("数据目录: %s\n", dataDir)
+		}
 	}
 }
 
 // startRuntimeBackground starts the ELR runtime in background mode
-func startRuntimeBackground() {
+func startRuntimeBackground(dataDir string) {
+	if dataDir != "" {
+		os.Setenv("ELR_DATA_DIR", dataDir)
+	}
+	
 	// Get runtime instance
 	runtime, err := getRuntime(false)
 	if err != nil {
@@ -1166,6 +1173,10 @@ func createContainer() {
 			rootFSPath = os.Args[i+1]
 		} else if os.Args[i] == "--read-only" {
 			readOnlyFS = true
+		} else if !strings.HasPrefix(os.Args[i], "--") && name == "" {
+			name = os.Args[i]
+		} else if !strings.HasPrefix(os.Args[i], "--") && image == "" {
+			image = os.Args[i]
 		}
 	}
 

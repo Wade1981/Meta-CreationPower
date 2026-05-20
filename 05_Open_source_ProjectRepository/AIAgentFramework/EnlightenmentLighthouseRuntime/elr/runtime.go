@@ -1058,6 +1058,69 @@ func (p *SimplePlatform) UnmountFileSystem(c *Container) error {
 
 
 
+// initDataDirectory initializes the data directory with fallback mechanism
+// Priority: environment variable > config > current directory > user home directory
+func initDataDirectory(config *Config, homeDir string) error {
+	// 1. Check environment variable first
+	if envDir := os.Getenv("ELR_DATA_DIR"); envDir != "" {
+		config.DataDir = envDir
+	}
+	
+	// 2. If not set, use current directory as default
+	if config.DataDir == "" {
+		config.DataDir = "./data"
+	}
+	
+	// 3. Handle ~ path expansion
+	if strings.HasPrefix(config.DataDir, "~") {
+		config.DataDir = filepath.Join(homeDir, config.DataDir[1:])
+	}
+	
+	// 4. Try to create the directory
+	if err := os.MkdirAll(config.DataDir, 0755); err != nil {
+		// Fallback to temporary directory if creation fails
+		tempDir := filepath.Join(os.TempDir(), "elr_data")
+		fmt.Printf("Warning: Failed to create data directory %s, using %s\n", config.DataDir, tempDir)
+		config.DataDir = tempDir
+		if err := os.MkdirAll(config.DataDir, 0755); err != nil {
+			return fmt.Errorf("failed to create data directory: %v", err)
+		}
+	}
+	
+	return nil
+}
+
+// initPluginDirectory initializes the plugin directory with fallback mechanism
+func initPluginDirectory(config *Config, homeDir string) error {
+	// 1. Check environment variable first
+	if envDir := os.Getenv("ELR_PLUGIN_DIR"); envDir != "" {
+		config.PluginDir = envDir
+	}
+	
+	// 2. If not set, use current directory as default
+	if config.PluginDir == "" {
+		config.PluginDir = "./plugins"
+	}
+	
+	// 3. Handle ~ path expansion
+	if strings.HasPrefix(config.PluginDir, "~") {
+		config.PluginDir = filepath.Join(homeDir, config.PluginDir[1:])
+	}
+	
+	// 4. Try to create the directory
+	if err := os.MkdirAll(config.PluginDir, 0755); err != nil {
+		// Fallback to temporary directory if creation fails
+		tempDir := filepath.Join(os.TempDir(), "elr_plugins")
+		fmt.Printf("Warning: Failed to create plugin directory %s, using %s\n", config.PluginDir, tempDir)
+		config.PluginDir = tempDir
+		if err := os.MkdirAll(config.PluginDir, 0755); err != nil {
+			return fmt.Errorf("failed to create plugin directory: %v", err)
+		}
+	}
+	
+	return nil
+}
+
 // NewRuntime creates a new runtime instance
 func NewRuntime(config *Config) (*Runtime, error) {
 	// Get user home directory
@@ -1066,26 +1129,15 @@ func NewRuntime(config *Config) (*Runtime, error) {
 		homeDir = "."
 	}
 
-	// Initialize data directory
-	if config.DataDir == "" {
-		config.DataDir = filepath.Join(homeDir, ".elr", "data")
-	} else if strings.HasPrefix(config.DataDir, "~") {
-		// Expand ~ to home directory
-		config.DataDir = filepath.Join(homeDir, config.DataDir[1:])
-	}
-	if err := os.MkdirAll(config.DataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data directory: %v", err)
+	// Initialize data directory with fallback mechanism
+	// Priority: environment variable > config > current directory > user home directory
+	if err := initDataDirectory(config, homeDir); err != nil {
+		return nil, err
 	}
 
-	// Initialize plugin directory
-	if config.PluginDir == "" {
-		config.PluginDir = filepath.Join(homeDir, ".elr", "plugins")
-	} else if strings.HasPrefix(config.PluginDir, "~") {
-		// Expand ~ to home directory
-		config.PluginDir = filepath.Join(homeDir, config.PluginDir[1:])
-	}
-	if err := os.MkdirAll(config.PluginDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create plugin directory: %v", err)
+	// Initialize plugin directory with fallback mechanism
+	if err := initPluginDirectory(config, homeDir); err != nil {
+		return nil, err
 	}
 
 	// Set default network configuration
