@@ -648,7 +648,7 @@ func printHelp() {
 	fmt.Println("  model install-deps Install model dependencies")
 	// 沙箱管理命令
 	fmt.Println("  sandbox list      List all sandboxes")
-	fmt.Println("  sandbox create    Create a new sandbox")
+	fmt.Println("  sandbox create <container-id>  Create a new sandbox (requires container ID)")
 	fmt.Println("  sandbox start     Start a sandbox")
 	fmt.Println("  sandbox stop      Stop a sandbox")
 	fmt.Println("  sandbox delete    Delete a sandbox")
@@ -2149,34 +2149,31 @@ func listSandboxes() {
 func printSandboxCreateExamples() {
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  Create sandbox with shorthand format:")
-	fmt.Println("    elr sandbox create <container-name>")
-	fmt.Println("    elr sandbox create TestContainer")
+	fmt.Println("  Create sandbox with container ID (recommended):")
+	fmt.Println("    elr sandbox create <container-id>")
+	fmt.Println("    elr sandbox create elr-1779249005936134700")
 	fmt.Println()
-	fmt.Println("  Create sandbox with container option:")
-	fmt.Println("    elr sandbox create --container <container-name>")
-	fmt.Println("    elr sandbox create --container TestContainer")
+	fmt.Println("  Create sandbox with --id option:")
+	fmt.Println("    elr sandbox create --id <container-id>")
+	fmt.Println("    elr sandbox create --id elr-1779249005936134700")
 }
 
 func createSandbox() {
 	fmt.Println("Creating sandbox...")
 
-	// Parse arguments
-	container := ""
+	// Parse arguments - use container ID for uniqueness
+	containerID := ""
 	for i := 3; i < len(os.Args); i++ {
-		if os.Args[i] == "--container" && i+1 < len(os.Args) {
-			container = os.Args[i+1]
-		} else if os.Args[i] == "--name" && i+1 < len(os.Args) {
-			// Support --name as alias for --container
-			container = os.Args[i+1]
+		if os.Args[i] == "--id" && i+1 < len(os.Args) {
+			containerID = os.Args[i+1]
 		} else if !strings.HasPrefix(os.Args[i], "--") {
-			// Support positional argument
-			container = os.Args[i]
+			// Support positional argument as container ID
+			containerID = os.Args[i]
 		}
 	}
 
-	if container == "" {
-		fmt.Println("Error: Container name is required")
+	if containerID == "" {
+		fmt.Println("Error: Container ID is required")
 		printSandboxCreateExamples()
 		os.Exit(1)
 	}
@@ -2203,7 +2200,7 @@ func createSandbox() {
 	}
 
 	// 创建沙箱
-	s, err := sandboxManager.CreateSandbox(container)
+	s, err := sandboxManager.CreateSandbox(containerID)
 	if err != nil {
 		fmt.Printf("Error creating sandbox: %v\n", err)
 		os.Exit(1)
