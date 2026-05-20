@@ -647,7 +647,7 @@ func printHelp() {
 	fmt.Println("  model delete      Delete a model")
 	fmt.Println("  model install-deps Install model dependencies")
 	// 沙箱管理命令
-	fmt.Println("  sandbox list      List all sandboxes")
+	fmt.Println("  sandbox list [--container <id>] [--running]  List sandboxes (filter by container or running)")
 	fmt.Println("  sandbox create <container-id>  Create a new sandbox (requires container ID)")
 	fmt.Println("  sandbox start     Start a sandbox")
 	fmt.Println("  sandbox stop      Stop a sandbox")
