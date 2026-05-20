@@ -979,7 +979,7 @@ func startRuntime() {
 		startRuntimeBackground(dataDir)
 	} else {
 		if isELRRunning() {
-			fmt.Println("ELR 轻量级容器已启动！命令端口: 8080，您现在可以启动或停止容器。")
+			fmt.Println("ELR 轻量级容器已启动！命令端口: 16888，您现在可以启动或停止容器。")
 			return
 		}
 
@@ -2091,82 +2091,72 @@ func listSandboxes() {
 		}
 	}
 
-	// 构建请求URL
-	url := "http://localhost:16888/api/sandbox/list"
-	if containerID != "" && runningOnly {
-		url = fmt.Sprintf("http://localhost:16888/api/sandbox/container/%s/running", containerID)
-	} else if containerID != "" {
-		url = fmt.Sprintf("http://localhost:16888/api/sandbox/container/%s", containerID)
-	} else if runningOnly {
-		url = "http://localhost:16888/api/sandbox/running"
-	}
+	// 从 sandbox-state.json 读取沙箱数据（与 status sandboxes 保持一致）
+	sandboxStateFile := "./sandbox-state.json"
+	var sandboxes []map[string]interface{}
 
-	// 发送 HTTP 请求
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Printf("Error calling API: %v\n", err)
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-
-	// 读取响应
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Printf("Error reading response: %v\n", err)
-		os.Exit(1)
-	}
-
-	// 解析响应
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		fmt.Printf("Error parsing response: %v\n", err)
-		fmt.Printf("Response: %s\n", string(body))
-		os.Exit(1)
-	}
-
-	// 检查是否成功
-	if success, ok := result["success"].(bool); ok && success {
-		// 获取沙箱列表
-		if sandboxesRaw, ok := result["sandboxes"].([]interface{}); ok {
-			if len(sandboxesRaw) == 0 {
-				fmt.Println("No sandboxes found")
-				return
-			}
-
-			fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "ID", "Name", "Container", "Status", "Created")
-			fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "--", "----", "---------", "------", "-------")
-
-			for _, s := range sandboxesRaw {
-				if sandbox, ok := s.(map[string]interface{}); ok {
-					id, _ := sandbox["id"].(string)
-					name, _ := sandbox["name"].(string)
-					container, _ := sandbox["container_id"].(string)
-					status, _ := sandbox["status"].(string)
-					created, _ := sandbox["created_at"].(string)
-
-					if name == "" {
-						name = id
-					}
-					if status == "" {
-						status = "unknown"
-					}
-
-					fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", id, name, container, status, created)
-				}
-			}
-
-			fmt.Printf("\nTotal sandboxes: %d\n", len(sandboxesRaw))
-		} else {
-			fmt.Println("No sandboxes found")
+	if data, err := os.ReadFile(sandboxStateFile); err == nil {
+		if err := json.Unmarshal(data, &sandboxes); err != nil {
+			fmt.Printf("Error parsing sandbox-state.json: %v\n", err)
+			os.Exit(1)
 		}
-	} else {
-		if errorMsg, ok := result["error"].(string); ok {
-			fmt.Printf("Error: %s\n", errorMsg)
-		} else {
-			fmt.Println("Error listing sandboxes")
-		}
-		os.Exit(1)
 	}
+
+	if len(sandboxes) == 0 {
+		fmt.Println("No sandboxes found")
+		return
+	}
+
+	// 过滤沙箱
+	var filtered []map[string]interface{}
+	for _, s := range sandboxes {
+		id, _ := s["id"].(string)
+		container, _ := s["container"].(string)
+		
+		// 如果指定了容器ID，只显示匹配的沙箱
+		if containerID != "" {
+			if container != containerID && !strings.Contains(container, containerID) {
+				continue
+			}
+		}
+
+		// 获取沙箱状态
+		status := getSandboxRuntimeStatus(id, container)
+
+		// 如果只显示运行中的沙箱
+		if runningOnly && status != "has run|running" {
+			continue
+		}
+
+		s["status"] = status
+		filtered = append(filtered, s)
+	}
+
+	if len(filtered) == 0 {
+		fmt.Println("No sandboxes found")
+		return
+	}
+
+	fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "ID", "Name", "Container", "Status", "Created")
+	fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", "--", "----", "---------", "------", "-------")
+
+	for _, s := range filtered {
+		id, _ := s["id"].(string)
+		container, _ := s["container"].(string)
+		status, _ := s["status"].(string)
+
+		createdAt := ""
+		if ca, ok := s["created_at"].(string); ok {
+			createdAt = ca
+			if len(createdAt) > 10 {
+				createdAt = createdAt[:10]
+			}
+		}
+
+		fmt.Printf("%-20s %-15s %-15s %-20s %-20s\n", id, id, container, status, createdAt)
+	}
+
+	fmt.Printf("\nTotal sandboxes: %d\n", len(filtered))
 }
 
 // createSandbox 创建新沙箱

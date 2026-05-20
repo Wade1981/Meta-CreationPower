@@ -1233,47 +1233,70 @@ func (n *NetworkManager) listSandboxesByContainer(w http.ResponseWriter, r *http
 
 	// 获取容器ID
 	containerID := strings.TrimPrefix(r.URL.Path, "/api/sandbox/container/")
+	// 移除可能的尾部斜杠或其他路径部分
+	containerID = strings.Split(containerID, "/")[0]
 	if containerID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Container ID is required"})
 		return
 	}
 
-	// 获取用户主目录
-	homeDir, _ := os.UserHomeDir()
-	if homeDir == "" {
-		homeDir = "."
-	}
-
-	// 构建数据目录
-	dataDir := filepath.Join(homeDir, ".elr", "data")
+	// 使用运行时配置的数据目录（与 listSandboxes 保持一致）
+	dataDir := n.runtime.Config.DataDir
 
 	// 加载沙箱列表
 	sandboxDir := filepath.Join(dataDir, "sandboxes")
 	var sandboxes []map[string]interface{}
+	sandboxIDs := make(map[string]bool)
 
+	// 首先从运行时沙箱列表获取（使用 ListSandboxes 方法，与 listRunningSandboxes 保持一致）
+	runtimeSandboxList := GetRuntimeSandboxList()
+	if runtimeSandboxList != nil {
+		runtimeSandboxes := runtimeSandboxList.ListSandboxes()
+		for _, rs := range runtimeSandboxes {
+			// 检查容器ID是否匹配（支持精确匹配和包含匹配）
+			if rs.ContainerID == containerID || strings.Contains(rs.ContainerID, containerID) {
+				sandboxIDs[rs.SandboxID] = true
+				sandboxes = append(sandboxes, map[string]interface{}{
+					"id":           rs.SandboxID,
+					"name":         rs.SandboxID,
+					"container_id": rs.ContainerID,
+					"status":       "has run|running",
+				})
+			}
+		}
+	}
+
+	// 然后从磁盘读取（排除已在运行时列表中的沙箱）
 	if entries, err := os.ReadDir(sandboxDir); err == nil {
 		for _, entry := range entries {
 			if entry.IsDir() {
 				sandboxID := entry.Name()
+				// 跳过已在运行时列表中的沙箱
+				if sandboxIDs[sandboxID] {
+					continue
+				}
+
 				metaFile := filepath.Join(sandboxDir, sandboxID, "sandbox.json")
 
 				if data, err := os.ReadFile(metaFile); err == nil {
 					var meta map[string]interface{}
 					if err := json.Unmarshal(data, &meta); err == nil {
-						// 检查容器ID是否匹配
-						if metaContainerID, ok := meta["container_id"].(string); ok && metaContainerID == containerID {
-							// 获取沙箱状态
-							status := GetSandboxStatus(sandboxID)
+						// 检查容器ID是否匹配（支持精确匹配和包含匹配）
+						if metaContainerID, ok := meta["container_id"].(string); ok {
+							if metaContainerID == containerID || strings.Contains(metaContainerID, containerID) {
+								// 获取沙箱状态
+								status := GetSandboxStatus(sandboxID)
 
-							sandbox := map[string]interface{}{
-								"id":          sandboxID,
-								"name":        sandboxID,
-								"container_id": meta["container_id"],
-								"status":      status,
-								"created_at":  meta["created_at"],
+								sandbox := map[string]interface{}{
+									"id":          sandboxID,
+									"name":        sandboxID,
+									"container_id": meta["container_id"],
+									"status":      status,
+									"created_at":  meta["created_at"],
+								}
+								sandboxes = append(sandboxes, sandbox)
 							}
-							sandboxes = append(sandboxes, sandbox)
 						}
 					}
 				}
