@@ -1151,11 +1151,26 @@ func exitRuntime() {
 	time.Sleep(2 * time.Second)
 }
 
+func printCreateContainerExamples() {
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  Create container with shorthand format:")
+	fmt.Println("    elr create <container-name> <image-name>")
+	fmt.Println("    elr create my-container default")
+	fmt.Println()
+	fmt.Println("  Create container with full options:")
+	fmt.Println("    elr create --name <container-name> --image <image-name>")
+	fmt.Println("    elr create --name my-container --image default")
+	fmt.Println()
+	fmt.Println("  Create container with file system isolation:")
+	fmt.Println("    elr create --name my-container --image default --fs-isolation")
+	fmt.Println("    elr create --name my-container --image default --fs-isolation --rootfs ./rootfs")
+}
+
 // createContainer creates a new container
 func createContainer() {
 	fmt.Println("Creating container...")
 	
-	// Parse arguments
 	name := ""
 	image := ""
 	fileSystemIsolation := false
@@ -1182,11 +1197,13 @@ func createContainer() {
 
 	if name == "" {
 		fmt.Println("Error: Container name is required")
+		printCreateContainerExamples()
 		os.Exit(1)
 	}
 
 	if image == "" {
 		fmt.Println("Error: Container image is required")
+		printCreateContainerExamples()
 		os.Exit(1)
 	}
 
