@@ -2146,20 +2146,38 @@ func listSandboxes() {
 }
 
 // createSandbox 创建新沙箱
+func printSandboxCreateExamples() {
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  Create sandbox with shorthand format:")
+	fmt.Println("    elr sandbox create <container-name>")
+	fmt.Println("    elr sandbox create TestContainer")
+	fmt.Println()
+	fmt.Println("  Create sandbox with container option:")
+	fmt.Println("    elr sandbox create --container <container-name>")
+	fmt.Println("    elr sandbox create --container TestContainer")
+}
+
 func createSandbox() {
 	fmt.Println("Creating sandbox...")
 
-	// 解析参数
+	// Parse arguments
 	container := ""
 	for i := 3; i < len(os.Args); i++ {
 		if os.Args[i] == "--container" && i+1 < len(os.Args) {
 			container = os.Args[i+1]
-			break
+		} else if os.Args[i] == "--name" && i+1 < len(os.Args) {
+			// Support --name as alias for --container
+			container = os.Args[i+1]
+		} else if !strings.HasPrefix(os.Args[i], "--") {
+			// Support positional argument
+			container = os.Args[i]
 		}
 	}
 
 	if container == "" {
 		fmt.Println("Error: Container name is required")
+		printSandboxCreateExamples()
 		os.Exit(1)
 	}
 
