@@ -1241,67 +1241,35 @@ func (n *NetworkManager) listSandboxesByContainer(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 使用运行时配置的数据目录（与 listSandboxes 保持一致）
+	// 使用运行时配置的数据目录
 	dataDir := n.runtime.Config.DataDir
 
-	// 加载沙箱列表
-	sandboxDir := filepath.Join(dataDir, "sandboxes")
-	var sandboxes []map[string]interface{}
-	sandboxIDs := make(map[string]bool)
-
-	// 首先从运行时沙箱列表获取（使用 ListSandboxes 方法，与 listRunningSandboxes 保持一致）
-	runtimeSandboxList := GetRuntimeSandboxList()
-	if runtimeSandboxList != nil {
-		runtimeSandboxes := runtimeSandboxList.ListSandboxes()
-		for _, rs := range runtimeSandboxes {
-			// 检查容器ID是否匹配（支持精确匹配和包含匹配）
-			if rs.ContainerID == containerID || strings.Contains(rs.ContainerID, containerID) {
-				sandboxIDs[rs.SandboxID] = true
-				sandboxes = append(sandboxes, map[string]interface{}{
-					"id":           rs.SandboxID,
-					"name":         rs.SandboxID,
-					"container_id": rs.ContainerID,
-					"status":       "has run|running",
-				})
-			}
-		}
+	// 初始化沙箱存储
+	store := GetSandboxStore()
+	if err := store.Initialize(dataDir); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to initialize sandbox store: %v", err)})
+		return
 	}
 
-	// 然后从磁盘读取（排除已在运行时列表中的沙箱）
-	if entries, err := os.ReadDir(sandboxDir); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				sandboxID := entry.Name()
-				// 跳过已在运行时列表中的沙箱
-				if sandboxIDs[sandboxID] {
-					continue
-				}
+	// 从数据库获取沙箱列表
+	dbSandboxes, err := store.ListSandboxesByContainer(containerID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to list sandboxes: %v", err)})
+		return
+	}
 
-				metaFile := filepath.Join(sandboxDir, sandboxID, "sandbox.json")
-
-				if data, err := os.ReadFile(metaFile); err == nil {
-					var meta map[string]interface{}
-					if err := json.Unmarshal(data, &meta); err == nil {
-						// 检查容器ID是否匹配（支持精确匹配和包含匹配）
-						if metaContainerID, ok := meta["container_id"].(string); ok {
-							if metaContainerID == containerID || strings.Contains(metaContainerID, containerID) {
-								// 获取沙箱状态
-								status := GetSandboxStatus(sandboxID)
-
-								sandbox := map[string]interface{}{
-									"id":          sandboxID,
-									"name":        sandboxID,
-									"container_id": meta["container_id"],
-									"status":      status,
-									"created_at":  meta["created_at"],
-								}
-								sandboxes = append(sandboxes, sandbox)
-							}
-						}
-					}
-				}
-			}
-		}
+	// 转换为响应格式
+	var sandboxes []map[string]interface{}
+	for _, sandbox := range dbSandboxes {
+		sandboxes = append(sandboxes, map[string]interface{}{
+			"id":          sandbox.ID,
+			"name":        sandbox.Name,
+			"container_id": sandbox.ContainerID,
+			"status":      sandbox.Status,
+			"created_at":  sandbox.CreatedAt.Format(time.RFC3339),
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1335,18 +1303,56 @@ func (n *NetworkManager) listRunningSandboxesByContainer(w http.ResponseWriter, 
 		return
 	}
 
-	// 获取运行时沙箱列表中指定容器的沙箱
-	runtimeSandboxList := GetRuntimeSandboxList()
-	var sandboxes []map[string]interface{}
+	// 使用运行时配置的数据目录
+	dataDir := n.runtime.Config.DataDir
 
+	// 初始化沙箱存储
+	store := GetSandboxStore()
+	if err := store.Initialize(dataDir); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to initialize sandbox store: %v", err)})
+		return
+	}
+
+	// 获取所有沙箱
+	allSandboxes, err := store.ListSandboxesByContainer(containerID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to list sandboxes: %v", err)})
+		return
+	}
+
+	// 获取运行时沙箱列表用于验证运行状态
+	runtimeSandboxList := GetRuntimeSandboxList()
+	var runningSandboxIDs map[string]bool
 	if runtimeSandboxList != nil {
-		sandboxList := runtimeSandboxList.GetSandboxesByContainer(containerID)
-		for _, runningSandbox := range sandboxList {
-			sandbox := map[string]interface{}{
-				"id":           runningSandbox.SandboxID,
-				"container_id": runningSandbox.ContainerID,
-			}
-			sandboxes = append(sandboxes, sandbox)
+		runningSandboxIDs = make(map[string]bool)
+		for _, rs := range runtimeSandboxList.ListSandboxes() {
+			runningSandboxIDs[rs.SandboxID] = true
+		}
+	}
+
+	// 转换为响应格式
+	var sandboxes []map[string]interface{}
+	for _, sandbox := range allSandboxes {
+		// 检查是否在运行时列表中
+		isRunning := false
+		if runningSandboxIDs != nil {
+			isRunning = runningSandboxIDs[sandbox.ID]
+		}
+		
+		// 检查状态字段
+		status := sandbox.Status
+		if isRunning && status != "has run|running" {
+			status = "has run|running"
+		}
+
+		// 只返回正在运行的
+		if isRunning || strings.Contains(status, "running") {
+			sandboxes = append(sandboxes, map[string]interface{}{
+				"id":           sandbox.ID,
+				"container_id": sandbox.ContainerID,
+			})
 		}
 	}
 
